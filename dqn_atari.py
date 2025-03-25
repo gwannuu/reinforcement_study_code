@@ -45,9 +45,9 @@ class Args:
     env_id: str = "ALE/Breakout-v5"
     # env_id: str = "CartPole-v1"
     """the id of the environment"""
-    total_timesteps: int = 50000000
+    total_timesteps: int = 25000000
     """total timesteps of the experiments"""
-    learning_rate: float = 1e-4
+    learning_rate: float = 3e-4
     """the learning rate of the optimizer"""
     num_envs: int = 1
     """the number of parallel game environments"""
@@ -78,7 +78,7 @@ class Args:
     log_episodic_info_every_n_episodes: int = 10
     """Logging related to episodes (eposode length, total reward, etc) occurs once every specified number"""
 
-    track: bool = False
+    track: bool = True
     """if toggled, this experiment will be tracked with Weights and Biases"""
     wandb_entity: str = None
     """the entity (team) of wandb's project"""
@@ -175,6 +175,7 @@ def make_train_env_list(args):
                     env,
                     video_folder=f"runs/{run_name}/videos",
                     episode_trigger=lambda x: x % (args.save_every_n_episodes / 5) == 0,
+                    fps=60,
                 )
             else:
                 env = gym.make(args.env_id, frame_skip=1)
@@ -239,7 +240,7 @@ if __name__ == "__main__":
         env_id = args.env_id.split("/")[-1]
         wandb.login(key=os.environ["WANDB_API_KEY"])
         run = wandb.init(
-            project=f"dqn-{env_id}",
+            project=f"{args.exp_name}-{env_id}",
             entity=args.wandb_entity,
             config=vars(args),
             name=run_name,
@@ -370,6 +371,7 @@ if __name__ == "__main__":
                 loss = F.mse_loss(q_values, targets)
                 optimizer.zero_grad()
                 loss.backward()
+                g_norm_before_clip = torch.nn.utils.clip_grad_norm_(q_network.parameters(), 10)
                 optimizer.step()
 
                 if training_step % args.log_every_n_updates == 0:
@@ -377,6 +379,7 @@ if __name__ == "__main__":
                     log_dict["train/loss"] = loss.item()
                     log_dict["train/lr"] = optimizer.param_groups[0]["lr"]
                     log_dict["train/epsilon"] = epsilon
+                    log_dict["train/gradient_norm"] = g_norm_before_clip.item()
 
                 training_step += 1
 
