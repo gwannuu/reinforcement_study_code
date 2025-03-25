@@ -129,40 +129,6 @@ class MyFireResetEnv(gym.Wrapper[np.ndarray, int, np.ndarray, int]):
         return obs, info
 
 
-# def make_train_env_list(args):
-#     def thunk(idx):
-#         def _thunk():
-#             if args.capture_video and idx == 0:
-#                 env = gym.make(args.env_id, render_mode="rgb_array")
-#                 env = gym.wrappers.RecordVideo(
-#                     env,
-#                     video_folder=f"runs/{run_name}/videos",
-#                     episode_trigger=lambda x: x % (args.save_every_n_episodes / 5) == 0,
-#                 )
-#             else:
-#                 env = gym.make(args.env_id)
-#                 env = gym.wrappers.RecordEpisodeStatistics(env)
-
-#             env = NoopResetEnv(env, noop_max=30)
-#             env = MaxAndSkipEnv(env, skip=4)
-#             env = EpisodicLifeEnv(env)
-#             if "FIRE" in env.unwrapped.get_action_meanings():
-#                 env = FireResetEnv(env)
-#             env = ClipRewardEnv(env)
-#             env = gym.wrappers.ResizeObservation(env, (84, 84))
-#             env = gym.wrappers.GrayscaleObservation(env)
-#             env = gym.wrappers.FrameStackObservation(env, 4)
-
-#             env.action_space.seed(args.seed)
-
-#             return env
-
-#         return _thunk
-
-#     env_callable_list = [thunk(i) for i in range(args.num_envs)]
-#     return env_callable_list
-
-
 def make_train_env_list(args):
     def thunk(idx):
         def _thunk():
@@ -172,6 +138,7 @@ def make_train_env_list(args):
                     env,
                     video_folder=f"runs/{run_name}/videos",
                     episode_trigger=lambda x: x % (args.save_every_n_episodes / 5) == 0,
+                    fps=60,
                 )
             else:
                 env = gym.make(args.env_id, frame_skip=1)
@@ -255,7 +222,7 @@ if __name__ == "__main__":
         env_id = args.env_id.split("/")[-1]
         wandb.login(key=os.environ["WANDB_API_KEY"])
         run = wandb.init(
-            project=f"dqn-{env_id}",
+            project=f"{args.exp_name}-{env_id}",
             entity=args.wandb_entity,
             config=vars(args),
             name=run_name,
@@ -384,9 +351,14 @@ if __name__ == "__main__":
 
                 targets = data.rewards + args.gamma * target_max_q_values
                 loss = F.mse_loss(q_values, targets)
-                optimizer.zero_grad()
                 loss.backward()
+
+                g_norm_before_clip = torch.nn.utils.clip_grad_norm_(
+                    q_network.parameters(), 10
+                )
+
                 optimizer.step()
+                optimizer.zero_grad()
 
                 if training_step % args.log_every_n_updates == 0:
                     log_dict["train/training_step"] = training_step
