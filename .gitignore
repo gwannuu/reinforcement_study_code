@@ -1,0 +1,5 @@
+.envrc
+.venv/
+.vscode/
+**/__pycache__/
+wandb
