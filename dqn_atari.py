@@ -88,7 +88,7 @@ class Args:
     """the user or org name of the model repository from the Hugging Face Hub"""
 
 
-class SkipEnv(gym.Wrapper[np.ndarray, int, np.ndarray, int]):
+class VecSkipEnv(gym.Wrapper[np.ndarray, int, np.ndarray, int]):
     def __init__(self, env: gym.Env, skip: int = 4) -> None:
         super().__init__(env)
         # most recent raw observations (for max pooling across time steps)
@@ -178,13 +178,13 @@ def make_train_env_list(args):
                 )
             else:
                 env = gym.make(args.env_id, frame_skip=1)
+            env = ClipRewardEnv(env)
             env = gym.wrappers.ResizeObservation(env, (84, 84))
             env = gym.wrappers.GrayscaleObservation(env)
             env = gym.wrappers.FrameStackObservation(env, 4)
             env = EpisodicLifeEnv(env)
             env = MyFireResetEnv(env)
-            env = SkipEnv(env)
-            env = ClipRewardEnv(env)
+            env = VecSkipEnv(env)
             return env
 
         return _thunk
@@ -197,7 +197,7 @@ def make_train_env_list(args):
 
 
 class QNetwork(nn.Module):
-    def __init__(self, env: gym.vector.SyncVectorEnv):
+    def __init__(self, num_action):
         super().__init__()
         self.nn = nn.Sequential(
             nn.Conv2d(4, 32, 8, stride=4),
@@ -209,7 +209,7 @@ class QNetwork(nn.Module):
             nn.Flatten(),
             nn.Linear(3136, 512),
             nn.ReLU(),
-            nn.Linear(512, env.single_action_space.n),
+            nn.Linear(512, num_action),
         )
 
     def forward(self, x):
@@ -268,9 +268,9 @@ if __name__ == "__main__":
         "only discrete action space is supported"
     )
 
-    q_network = QNetwork(envs).to(device)
+    q_network = QNetwork(envs.single_action_space.n).to(device)
     optimizer = optim.Adam(q_network.parameters(), lr=args.learning_rate)
-    target_network = QNetwork(envs).to(device)
+    target_network = QNetwork(envs.single_action_space.n).to(device)
     target_network.load_state_dict(q_network.state_dict())
 
     rb = ReplayBuffer(
