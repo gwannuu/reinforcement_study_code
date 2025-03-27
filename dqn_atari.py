@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from dqn_atari_simulate import atari_four_image_concat
 from lib import device, seed_setting
 from stable_baselines3.common.buffers import ReplayBuffer
 from tqdm import trange
@@ -22,7 +23,7 @@ from stable_baselines3.common.atari_wrappers import (
     MaxAndSkipEnv,
     NoopResetEnv,
 )
- 
+
 from stable_baselines3.common.type_aliases import AtariResetReturn, AtariStepReturn
 
 gym.register_envs(ale_py)
@@ -88,7 +89,7 @@ class Args:
     """the user or org name of the model repository from the Hugging Face Hub"""
 
 
-class SkipEnv(gym.Wrapper[np.ndarray, int, np.ndarray, int]):
+class VecSkipEnv(gym.Wrapper[np.ndarray, int, np.ndarray, int]):
     def __init__(self, env: gym.Env, skip: int = 4) -> None:
         super().__init__(env)
         # most recent raw observations (for max pooling across time steps)
@@ -178,13 +179,13 @@ def make_train_env_list(args):
                 )
             else:
                 env = gym.make(args.env_id, frame_skip=1)
+            env = ClipRewardEnv(env)
             env = gym.wrappers.ResizeObservation(env, (84, 84))
             env = gym.wrappers.GrayscaleObservation(env)
             env = gym.wrappers.FrameStackObservation(env, 4)
             env = EpisodicLifeEnv(env)
             env = MyFireResetEnv(env)
-            env = SkipEnv(env)
-            env = ClipRewardEnv(env)
+            env = VecSkipEnv(env)
             return env
 
         return _thunk
@@ -197,7 +198,7 @@ def make_train_env_list(args):
 
 
 class QNetwork(nn.Module):
-    def __init__(self, env: gym.vector.SyncVectorEnv):
+    def __init__(self, num_action):
         super().__init__()
         self.nn = nn.Sequential(
             nn.Conv2d(4, 32, 8, stride=4),
@@ -209,7 +210,7 @@ class QNetwork(nn.Module):
             nn.Flatten(),
             nn.Linear(3136, 512),
             nn.ReLU(),
-            nn.Linear(512, env.single_action_space.n),
+            nn.Linear(512, num_action),
         )
 
     def forward(self, x):
@@ -219,11 +220,6 @@ class QNetwork(nn.Module):
 def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
     slope = (end_e - start_e) / duration
     return max(slope * t + start_e, end_e)
-
-
-# def atari_four_image_concat(src):
-#     src = src[0]
-#     return np.hstack([src[0], src[1], src[2], src[3]])
 
 
 if __name__ == "__main__":
@@ -268,9 +264,9 @@ if __name__ == "__main__":
         "only discrete action space is supported"
     )
 
-    q_network = QNetwork(envs).to(device)
+    q_network = QNetwork(envs.single_action_space.n).to(device)
     optimizer = optim.Adam(q_network.parameters(), lr=args.learning_rate)
-    target_network = QNetwork(envs).to(device)
+    target_network = QNetwork(envs.single_action_space.n).to(device)
     target_network.load_state_dict(q_network.state_dict())
 
     rb = ReplayBuffer(
@@ -329,9 +325,25 @@ if __name__ == "__main__":
             np.logical_or(terminations, truncations),
             infos,
         )
+        # # VISUALIZE for DEBUGGING
+        # if terminations or truncations:
+        #     pass
+        # next_imgs = atari_four_image_concat(real_next_obs[0])
+        # imgs = atari_four_image_concat(obs[0])
+        # vis = np.vstack([next_imgs, imgs])
+        # vis = cv2.resize(vis, dsize=None, fx=3, fy=3)
+        # cv2.imshow("", vis)
+        # cv2.waitKey()
 
         # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
         obs = next_obs
+        # if global_step > 50000:
+        #     imgs = atari_four_image_concat(obs[0])
+        #     imgs = cv2.resize(
+        #         imgs, dsize=None, fx=3, fy=3, interpolation=cv2.INTER_LINEAR
+        #     )
+        #     cv2.imshow("", imgs)
+        #     cv2.waitKey()
 
         if truncations or terminations:
             if episode_step % args.log_episodic_info_every_n_episodes == 0:

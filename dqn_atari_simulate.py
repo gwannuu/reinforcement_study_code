@@ -126,47 +126,50 @@ def save_four_bgr_images(src, prefix):
 #     save_four_bgr_images(state, prefix=dir)
 
 
-s, info = env.reset()
-save_four_bgr_images(s, "temp_images")
-# cv2.imwrite("temp.png", cv2.cvtColor(s, cv2.COLOR_BGR2RGB))
-r = None
-for i in range(100000):
-    printed = f"episode_frame_number: {info['episode_frame_number']}, global_step: {i}"
-    if r is not None:
-        printed += f", reward: {r}"
-    print(printed)
-    img = atari_four_image_concat(s)
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    img = cv2.resize(img, dsize=None, fx=2, fy=2)
-    cv2.imshow("frame", img)
-    k = cv2.waitKey()
-    # if k == 2:
-    #     a = 3
-    # elif k == 3:
-    #     a = 2
-    # elif k == 0:
-    #     a = 1
-    # elif k == 1:
-    #     a = 0
-    # else:
-    #     cv2.destroyAllWindows()
-    #     break
-
-    a = np.random.randint(0, 4)
-
-    ns, r, ter, trun, info = env.step(a)
-    if i % 10 and i > 0:
-        ns, info = env.reset()
-
-    if trun:
-        print("Truncated is true!")
-        ns, info = env.reset()
-        r = None
-    if ter:
-        print("Terminate is true")
-        ns, info = env.reset()
-        r = None
-
-    s = ns
+if __name__ == "__main__":
+    s, info = env.reset()
     save_four_bgr_images(s, "temp_images")
     # cv2.imwrite("temp.png", cv2.cvtColor(s, cv2.COLOR_BGR2RGB))
+    r = None
+    for i in range(100000):
+        printed = (
+            f"episode_frame_number: {info['episode_frame_number']}, global_step: {i}"
+        )
+        if r is not None:
+            printed += f", reward: {r}"
+        print(printed)
+        img = atari_four_image_concat(s)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = cv2.resize(img, dsize=None, fx=2, fy=2)
+        cv2.imshow("frame", img)
+        k = cv2.waitKey()
+        # if k == 2:
+        #     a = 3
+        # elif k == 3:
+        #     a = 2
+        # elif k == 0:
+        #     a = 1
+        # elif k == 1:
+        #     a = 0
+        # else:
+        #     cv2.destroyAllWindows()
+        #     break
+
+        a = np.random.randint(0, 4)
+
+        ns, r, ter, trun, info = env.step(a)
+        if i % 10 and i > 0:
+            ns, info = env.reset()
+
+        if trun:
+            print("Truncated is true!")
+            ns, info = env.reset()
+            r = None
+        if ter:
+            print("Terminate is true")
+            ns, info = env.reset()
+            r = None
+
+        s = ns
+        save_four_bgr_images(s, "temp_images")
+        # cv2.imwrite("temp.png", cv2.cvtColor(s, cv2.COLOR_BGR2RGB))
