@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from dqn_atari_simulate import atari_four_image_concat
 from lib import device, seed_setting
 from stable_baselines3.common.buffers import ReplayBuffer
 from tqdm import trange
@@ -22,7 +23,7 @@ from stable_baselines3.common.atari_wrappers import (
     MaxAndSkipEnv,
     NoopResetEnv,
 )
- 
+
 from stable_baselines3.common.type_aliases import AtariResetReturn, AtariStepReturn
 
 gym.register_envs(ale_py)
@@ -221,11 +222,6 @@ def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
     return max(slope * t + start_e, end_e)
 
 
-# def atari_four_image_concat(src):
-#     src = src[0]
-#     return np.hstack([src[0], src[1], src[2], src[3]])
-
-
 if __name__ == "__main__":
     import time
 
@@ -329,9 +325,25 @@ if __name__ == "__main__":
             np.logical_or(terminations, truncations),
             infos,
         )
+        # # VISUALIZE for DEBUGGING
+        # if terminations or truncations:
+        #     pass
+        # next_imgs = atari_four_image_concat(real_next_obs[0])
+        # imgs = atari_four_image_concat(obs[0])
+        # vis = np.vstack([next_imgs, imgs])
+        # vis = cv2.resize(vis, dsize=None, fx=3, fy=3)
+        # cv2.imshow("", vis)
+        # cv2.waitKey()
 
         # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
         obs = next_obs
+        # if global_step > 50000:
+        #     imgs = atari_four_image_concat(obs[0])
+        #     imgs = cv2.resize(
+        #         imgs, dsize=None, fx=3, fy=3, interpolation=cv2.INTER_LINEAR
+        #     )
+        #     cv2.imshow("", imgs)
+        #     cv2.waitKey()
 
         if truncations or terminations:
             if episode_step % args.log_episodic_info_every_n_episodes == 0:
