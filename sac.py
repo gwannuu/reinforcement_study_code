@@ -44,7 +44,7 @@ class Config:
     reward_scale_factor: float = 1 / 10
 
     track: bool = True
-    capture_video: bool = True
+    capture_video: bool = False
     # model_save_frequency: int = 50000  # env step
     loss_logging_frequency: int = 10000  # env step
     episode_reward_frequency: int = 100000  # env step
