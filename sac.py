@@ -15,8 +15,8 @@ from tqdm import trange, tqdm
 
 from lib import seed_setting
 
-device = "mps"
-# device = "cuda:1"
+#device = "mps"
+device = "cuda:1"
 # device = "cuda:3"
 
 
