@@ -36,8 +36,7 @@ class Config:
     batch_size: int = 256
     gamma: float = 0.99
     v_tau: float = 0.005
-    # update_start_buffer_size: int = 50000
-    update_start_buffer_size: int = 500
+    update_start_buffer_size: int = 50000
     train_frequency: int = 1
     num_update_per_train: int = 1
     gradient_steps: int = 1
@@ -189,7 +188,7 @@ class Policy(FC):
             )  # Is it ok using clamp? Are there any gradient disappear?
             std = log_std.exp()
             normal_dist = D.Normal(loc=mean, scale=std)
-            action = normal_dist.sample()
+            action = normal_dist.rsample()
             log_probs = normal_dist.log_prob(action)
             action = (torch.tanh(action) - self.a_min) * self.a_max
             log_prob = torch.sum(log_probs, dim=-1, keepdim=True)
