@@ -91,8 +91,8 @@ class ReplayBuffer:
         )
         self.actions = np.zeros((buffer_size, *action_space.shape), dtype=np.float32)
         self.rewards = np.zeros((buffer_size, 1), dtype=np.float32)
-        self.truncated = np.zeros((buffer_size, 1), dtype=np.bool_)
-        self.terminated = np.zeros((buffer_size, 1), dtype=np.bool_)
+        self.truncated = np.zeros((buffer_size, 1), dtype=np.int32)
+        self.terminated = np.zeros((buffer_size, 1), dtype=np.int32)
         self.next_observations = np.zeros(
             (buffer_size, *observation_space.shape), dtype=np.float32
         )
@@ -105,8 +105,8 @@ class ReplayBuffer:
         self.actions[self.ptr] = action
         self.rewards[self.ptr] = reward
         self.next_observations[self.ptr] = next_obs
-        self.truncated[self.ptr] = truncated
-        self.terminated[self.ptr] = terminated
+        self.truncated[self.ptr] = np.array(truncated, dtype=np.int32)
+        self.terminated[self.ptr] = np.array(terminated, dtype=np.int32)
 
         self.ptr = (self.ptr + 1) % self.buffer_size
         self.cur_size = min(self.cur_size + 1, self.buffer_size)
@@ -398,7 +398,9 @@ if __name__ == "__main__":
 
                 # Update Q
                 scaled_reward = reward_scaling(reward=data.reward, config=config)
-                q_target = scaled_reward + config.gamma * v_soft(data.next_state)
+                q_target = scaled_reward + (
+                    1 - data.terminated
+                ) * config.gamma * v_soft(data.next_state)
 
                 q1_estimate = q1(torch.cat([data.state, data.action], dim=-1))
                 q1_loss = F.mse_loss(input=q1_estimate, target=q_target) / 2
