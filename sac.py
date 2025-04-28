@@ -15,9 +15,9 @@ from tqdm import trange, tqdm
 
 from lib import seed_setting
 
-device = "mps"
-# device = "cuda:1"
-# device = "cuda:3"
+#device = "mps"
+#device = "cuda:1"
+device = "cuda:3"
 
 
 @dataclass
@@ -36,15 +36,14 @@ class Config:
     batch_size: int = 256
     gamma: float = 0.99
     v_tau: float = 0.005
-    # update_start_buffer_size: int = 50000
-    update_start_buffer_size: int = 500
+    update_start_buffer_size: int = 50000
     train_frequency: int = 1
     num_update_per_train: int = 1
     gradient_steps: int = 1
     reward_scale_factor: float = 1 / 10
 
     track: bool = True
-    capture_video: bool = True
+    capture_video: bool = False
     # model_save_frequency: int = 50000  # env step
     loss_logging_frequency: int = 10000  # env step
     episode_reward_frequency: int = 100000  # env step
@@ -92,8 +91,8 @@ class ReplayBuffer:
         )
         self.actions = np.zeros((buffer_size, *action_space.shape), dtype=np.float32)
         self.rewards = np.zeros((buffer_size, 1), dtype=np.float32)
-        self.truncated = np.zeros((buffer_size, 1), dtype=np.bool_)
-        self.terminated = np.zeros((buffer_size, 1), dtype=np.bool_)
+        self.truncated = np.zeros((buffer_size, 1), dtype=np.int32)
+        self.terminated = np.zeros((buffer_size, 1), dtype=np.int32)
         self.next_observations = np.zeros(
             (buffer_size, *observation_space.shape), dtype=np.float32
         )
@@ -106,8 +105,8 @@ class ReplayBuffer:
         self.actions[self.ptr] = action
         self.rewards[self.ptr] = reward
         self.next_observations[self.ptr] = next_obs
-        self.truncated[self.ptr] = truncated
-        self.terminated[self.ptr] = terminated
+        self.truncated[self.ptr] = np.array(truncated, dtype=np.int32)
+        self.terminated[self.ptr] = np.array(terminated, dtype=np.int32)
 
         self.ptr = (self.ptr + 1) % self.buffer_size
         self.cur_size = min(self.cur_size + 1, self.buffer_size)
@@ -189,7 +188,7 @@ class Policy(FC):
             )  # Is it ok using clamp? Are there any gradient disappear?
             std = log_std.exp()
             normal_dist = D.Normal(loc=mean, scale=std)
-            action = normal_dist.sample()
+            action = normal_dist.rsample()
             log_probs = normal_dist.log_prob(action)
             action = (torch.tanh(action) - self.a_min) * self.a_max
             log_prob = torch.sum(log_probs, dim=-1, keepdim=True)
@@ -399,7 +398,9 @@ if __name__ == "__main__":
 
                 # Update Q
                 scaled_reward = reward_scaling(reward=data.reward, config=config)
-                q_target = scaled_reward + config.gamma * v_soft(data.next_state)
+                q_target = scaled_reward + (
+                    1 - data.terminated
+                ) * config.gamma * v_soft(data.next_state)
 
                 q1_estimate = q1(torch.cat([data.state, data.action], dim=-1))
                 q1_loss = F.mse_loss(input=q1_estimate, target=q_target) / 2
