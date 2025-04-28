@@ -42,7 +42,7 @@ class Config:
     gradient_steps: int = 1
     reward_scale_factor: float = 1 / 10
 
-    track: bool = False
+    track: bool = True
     capture_video: bool = False
     # model_save_frequency: int = 50000  # env step
     loss_logging_frequency: int = 10000  # env step
