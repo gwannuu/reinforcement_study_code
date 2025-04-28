@@ -42,7 +42,7 @@ class Config:
     gradient_steps: int = 1
     reward_scale_factor: float = 1 / 10
 
-    track: bool = True
+    track: bool = False
     capture_video: bool = False
     # model_save_frequency: int = 50000  # env step
     loss_logging_frequency: int = 10000  # env step
@@ -175,27 +175,31 @@ class FC(nn.Module):
 
 
 class Policy(FC):
-    def __init__(self, input_dim, output_dim, a_min, a_max):
+    def __init__(self, input_dim, output_dim):
         super().__init__(input_dim=input_dim, output_dim=output_dim)
-        self.a_min = a_min
-        self.a_max = a_max
 
     def sample_action(self, output, deterministic=False):
         if not deterministic:
             mean, log_std = output.chunk(2, dim=-1)
             log_std = log_std.clamp(
                 -20, 2
-            )  # Is it ok using clamp? Are there any gradient disappear?
+            )
             std = log_std.exp()
             normal_dist = D.Normal(loc=mean, scale=std)
-            action = normal_dist.rsample()
-            log_probs = normal_dist.log_prob(action)
-            action = (torch.tanh(action) - self.a_min) * self.a_max
+            dist = D.TransformedDistribution(normal_dist, D.transforms.TanhTransform(cache_size=1))
+            action = dist.rsample()
+            log_probs = dist.log_prob(action)
             log_prob = torch.sum(log_probs, dim=-1, keepdim=True)
+            # action = normal_dist.rsample()/
+            # log_probs = normal_dist.log_prob(action)
+            # log_prob = torch.sum(log_probs, dim=-1, keepdim=True)
+            # log_prob -= torch.sum(torch.log(1 - torch.square(torch.tanh(action))), dim=-1, keepdim=True)
+            # action = torch.tanh(action)
             return action, log_prob
         else:
-            mean = output[:, : self.a_min.shape[0]]
-            action = (torch.tanh(mean) - self.a_min) * self.a_max
+            # mean = output[:, : self.a_min.shape[0]]
+            mean, _ = output.chunk(2, dim=-1)
+            action = torch.tanh(mean)
             log_probs = torch.zeros_like(action, device=device)
             log_prob = log_probs.sum(dim=-1, keepdim=True)
             return action, log_prob
@@ -255,8 +259,6 @@ if __name__ == "__main__":
     p = Policy(
         input_dim=observation_dim,
         output_dim=action_dim * 2,
-        a_min=a_min,
-        a_max=a_max,
     )
 
     v.to(device)
