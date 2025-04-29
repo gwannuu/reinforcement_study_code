@@ -242,17 +242,16 @@ class Policy(FC):
             log_std = log_std.clamp(-20, 2)
             std = log_std.exp()
             normal_dist = D.Normal(loc=mean, scale=std)
-            dist = D.TransformedDistribution(
-                normal_dist, D.transforms.TanhTransform(cache_size=1)
-            )
-            action = dist.rsample()
-            log_probs = dist.log_prob(action)
+            action = normal_dist.rsample()
+            log_probs = normal_dist.log_prob(action)
             log_prob = torch.sum(log_probs, dim=-1, keepdim=True)
+
+
             # action = normal_dist.rsample()/
             # log_probs = normal_dist.log_prob(action)
             # log_prob = torch.sum(log_probs, dim=-1, keepdim=True)
             # log_prob -= torch.sum(torch.log(1 - torch.square(torch.tanh(action))), dim=-1, keepdim=True)
-            # action = torch.tanh(action)
+            action = torch.tanh(action)
             return action, log_prob
         else:
             # mean = output[:, : self.a_min.shape[0]]
