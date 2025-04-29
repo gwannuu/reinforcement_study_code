@@ -11,7 +11,7 @@ import torch.distributions as D
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from tqdm import trange, tqdm
+from tqdm import tqdm, trange
 
 from lib import seed_setting
 
@@ -181,12 +181,12 @@ class Policy(FC):
     def sample_action(self, output, deterministic=False):
         if not deterministic:
             mean, log_std = output.chunk(2, dim=-1)
-            log_std = log_std.clamp(
-                -20, 2
-            )
+            log_std = log_std.clamp(-20, 2)
             std = log_std.exp()
             normal_dist = D.Normal(loc=mean, scale=std)
-            dist = D.TransformedDistribution(normal_dist, D.transforms.TanhTransform(cache_size=1))
+            dist = D.TransformedDistribution(
+                normal_dist, D.transforms.TanhTransform(cache_size=1)
+            )
             action = dist.rsample()
             log_probs = dist.log_prob(action)
             log_prob = torch.sum(log_probs, dim=-1, keepdim=True)
@@ -406,10 +406,8 @@ if __name__ == "__main__":
 
                 q1_estimate = q1(torch.cat([data.state, data.action], dim=-1))
                 q1_loss = F.mse_loss(input=q1_estimate, target=q_target) / 2
-                q2_loss = F.mse_loss(
-                    input=q2(torch.cat([data.state, data.action], dim=-1)),
-                    target=q_target,
-                )
+                q2_estimate = q2(torch.cat([data.state, data.action], dim=-1))
+                q2_loss = F.mse_loss(input=q2_estimate, target=q_target) / 2
                 q_loss = q1_loss + q2_loss
                 q_loss.backward()
                 q_optimizer.step()
