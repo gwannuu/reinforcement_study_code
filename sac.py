@@ -4,6 +4,7 @@ from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import NamedTuple, OrderedDict
 
+import cv2
 import gymnasium as gym
 import numpy as np
 import torch
@@ -46,8 +47,8 @@ class Config:
     capture_video: bool = False
     # model_save_frequency: int = 50000  # env step
     loss_logging_frequency: int = 10000  # env step
-    episode_reward_frequency: int = 100000  # env step
-    record_frequency: int = 500000  # env step
+    eval_frequency: int = 100000  # env step
+    record_every_n_eval_steps: int = 5  # env step
 
 
 if __name__ == "__main__":
@@ -67,6 +68,8 @@ def make_id():
 if __name__ == "__main__":
     id = make_id()
     run_name = make_run_name(config=config, id=id)
+    eval_video_folder = f"runs/{run_name}/eval/videos"
+    os.makedirs(eval_video_folder, exist_ok=True)
 
 
 class BufferData(NamedTuple):
@@ -142,22 +145,24 @@ def convert_to_torch(data, device=None):
     return data
 
 
-def make_single_env(config: Config, train: bool):
+def make_single_env(config: Config):
     if config.capture_video:
         env = gym.make(config.env_id, render_mode="rgb_array")
-        video_folder = (
-            f"runs/{run_name}/train/videos" if train else f"runs/{run_name}/eval/videos"
-        )
-        env = gym.wrappers.RecordVideo(
-            env,
-            video_folder=video_folder,
-            # episode_trigger=lambda x: x % (config.record_every_n_episodes) == 0,
-            step_trigger=lambda x: x % (config.record_frequency) == 0,
-        )
     else:
         env = gym.make(config.env_id)
 
     return env
+
+
+def record_video(seq: list[np.ndarray], fps: int, filename: str):
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    writer = cv2.VideoWriter(
+        filename=filename, fourcc=fourcc, fps=fps, frameSize=seq[0].shape[0:2][::-1]
+    )
+    for img in seq:
+        writer.write(cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+
+    writer.release()
 
 
 class FC(nn.Module):
@@ -243,8 +248,8 @@ if __name__ == "__main__":
         )
     seed_setting(config.seed, config.torch_deterministic)
 
-    env = make_single_env(config=config, train=True)
-    eval_env = make_single_env(config=config, train=False)
+    env = make_single_env(config=config)
+    eval_env = make_single_env(config=config)
     observation_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
     a_min, a_max = (
@@ -288,6 +293,7 @@ if __name__ == "__main__":
     # episode_step = 0
     total_reward = 0
     episode_length = 0
+    eval_num = 0
     pbar = tqdm(total=config.total_timesteps)
     while training_step < config.total_timesteps:
         log_dict = {}
@@ -321,15 +327,19 @@ if __name__ == "__main__":
             continue
 
         # evaluation code
-        if training_step % config.episode_reward_frequency == 0:
+        if training_step % config.eval_frequency == 0:
             v.eval()
             v_soft.eval()
             q1.eval()
             q2.eval()
             p.eval()
 
+            record_states = []
+
             with torch.no_grad():
                 eval_obs, _ = eval_env.reset(seed=config.eval_env_seed)
+                if eval_num % config.record_every_n_eval_steps == 0  and config.capture_video and config.capture_video:
+                    record_states.append(eval_env.render())
                 eval_s_ = convert_to_torch(eval_obs, device=device)
                 eval_pi_out = p(eval_s_)
                 eval_a_, _ = p.sample_action(output=eval_pi_out, deterministic=True)
@@ -340,7 +350,10 @@ if __name__ == "__main__":
                     eval_terminated,
                     eval_truncated,
                     eval_info,
-                ) = env.step(action=eval_action)
+                ) = eval_env.step(action=eval_action)
+
+                if eval_num % config.record_every_n_eval_steps == 0  and config.capture_video:
+                    record_states.append(eval_env.render())
 
                 eval_sum_return = eval_reward
                 eval_step = 1
@@ -356,11 +369,20 @@ if __name__ == "__main__":
                         eval_terminated,
                         eval_truncated,
                         eval_info,
-                    ) = env.step(action=eval_action)
+                    ) = eval_env.step(action=eval_action)
+
+                    if eval_num % config.record_every_n_eval_steps == 0  and config.capture_video:
+                        record_states.append(eval_env.render())
 
                     eval_sum_return += eval_reward
                     eval_step += 1
 
+                if eval_num % config.record_every_n_eval_steps == 0  and config.capture_video:
+                    record_video(
+                        record_states,
+                        fps=60,
+                        filename=f"{eval_video_folder}/eval_at_training_step_{training_step}.mp4",
+                    )
                 log_dict["eval/average_reward"] = eval_sum_return / eval_step
                 eval_step = 0
 
@@ -369,6 +391,7 @@ if __name__ == "__main__":
             q1.eval()
             q2.eval()
             p.eval()
+            eval_num += 1
 
         # train code
         if training_step % config.train_frequency == 0:
