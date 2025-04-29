@@ -47,9 +47,9 @@ class Config:
     track: bool = True
     capture_video: bool = True
     # model_save_frequency: int = 50000  # env step
-    loss_logging_frequency: int = 10000  # env step
-    eval_frequency: int = 50000  # env step
-    record_every_n_eval_steps: int = 5  # env step
+    loss_logging_frequency: int = 100  # env step
+    eval_frequency: int = 100  # env step
+    record_every_n_eval_steps: int = 3  # env step
 
 
 if __name__ == "__main__":
