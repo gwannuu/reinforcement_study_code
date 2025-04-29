@@ -165,6 +165,28 @@ def record_video(seq: list[np.ndarray], fps: int, filename: str):
     writer.release()
 
 
+@torch.no_grad()
+def calc_gradient_norms(networks: list[nn.Module]):
+    norms = []
+    for n in networks:
+        param_generator = n.parameters()
+        grads = [p.grad for p in param_generator if p.grad is not None]
+        norm_grads = nn.utils.get_total_norm(grads)
+        norms.append(norm_grads)
+
+    return norms
+
+
+@torch.no_grad()
+def calc_parameter_norms(networks: list[nn.Module]):
+    norms = []
+    for n in networks:
+        params = [p for p in n.parameters()]
+        norm = nn.utils.get_total_norm(params)
+        norms.append(norm)
+    return norms
+
+
 class FC(nn.Module):
     def __init__(self, input_dim, output_dim):
         super().__init__()
@@ -338,7 +360,10 @@ if __name__ == "__main__":
 
             with torch.no_grad():
                 eval_obs, _ = eval_env.reset(seed=config.eval_env_seed)
-                if eval_num % config.record_every_n_eval_steps == 0  and config.capture_video and config.capture_video:
+                if (
+                    eval_num % config.record_every_n_eval_steps == 0
+                    and config.capture_video
+                ):
                     record_states.append(eval_env.render())
                 eval_s_ = convert_to_torch(eval_obs, device=device)
                 eval_pi_out = p(eval_s_)
@@ -352,7 +377,10 @@ if __name__ == "__main__":
                     eval_info,
                 ) = eval_env.step(action=eval_action)
 
-                if eval_num % config.record_every_n_eval_steps == 0  and config.capture_video:
+                if (
+                    eval_num % config.record_every_n_eval_steps == 0
+                    and config.capture_video
+                ):
                     record_states.append(eval_env.render())
 
                 eval_sum_return = eval_reward
@@ -371,13 +399,19 @@ if __name__ == "__main__":
                         eval_info,
                     ) = eval_env.step(action=eval_action)
 
-                    if eval_num % config.record_every_n_eval_steps == 0  and config.capture_video:
+                    if (
+                        eval_num % config.record_every_n_eval_steps == 0
+                        and config.capture_video
+                    ):
                         record_states.append(eval_env.render())
 
                     eval_sum_return += eval_reward
                     eval_step += 1
 
-                if eval_num % config.record_every_n_eval_steps == 0  and config.capture_video:
+                if (
+                    eval_num % config.record_every_n_eval_steps == 0
+                    and config.capture_video
+                ):
                     record_video(
                         record_states,
                         fps=60,
@@ -401,6 +435,26 @@ if __name__ == "__main__":
                 log_dict["train/q2_loss"] = 0
                 log_dict["train/p_loss"] = 0
 
+                log_dict["train/v_loss_grad_norm/v"] = 0
+                log_dict["train/v_loss_grad_norm/q1"] = 0
+                log_dict["train/v_loss_grad_norm/q2"] = 0
+                log_dict["train/v_loss_grad_norm/p"] = 0
+
+                log_dict["train/q_loss_grad_norm/v"] = 0
+                log_dict["train/q_loss_grad_norm/q1"] = 0
+                log_dict["train/q_loss_grad_norm/q2"] = 0
+                log_dict["train/q_loss_grad_norm/p"] = 0
+
+                log_dict["train/p_loss_grad_norm/v"] = 0
+                log_dict["train/p_loss_grad_norm/q1"] = 0
+                log_dict["train/p_loss_grad_norm/q2"] = 0
+                log_dict["train/p_loss_grad_norm/p"] = 0
+
+                log_dict["train/v_norm"] = 0
+                log_dict["train/q1_norm"] = 0
+                log_dict["train/q2_norm"] = 0
+                log_dict["train/p_norm"] = 0
+
             for update_num in range(config.num_update_per_train):
                 data = rb.sample(config.batch_size)
 
@@ -418,6 +472,13 @@ if __name__ == "__main__":
                 v_estimate = v(data.state)
                 v_loss = F.mse_loss(input=v_estimate, target=v_target) / 2
                 v_loss.backward()
+                if training_step % config.loss_logging_frequency == 0:
+                    norms = calc_gradient_norms([v, q1, q2, p])
+                    log_dict["train/v_loss_grad_norm/v"] += norms[0]
+                    log_dict["train/v_loss_grad_norm/q1"] += norms[1]
+                    log_dict["train/v_loss_grad_norm/q2"] += norms[2]
+                    log_dict["train/v_loss_grad_norm/p"] += norms[3]
+
                 v_optimizer.step()
                 v_optimizer.zero_grad()
 
@@ -433,6 +494,12 @@ if __name__ == "__main__":
                 q2_loss = F.mse_loss(input=q2_estimate, target=q_target) / 2
                 q_loss = q1_loss + q2_loss
                 q_loss.backward()
+                if training_step % config.loss_logging_frequency == 0:
+                    norms = calc_gradient_norms([v, q1, q2, p])
+                    log_dict["train/q_loss_grad_norm/v"] += norms[0]
+                    log_dict["train/q_loss_grad_norm/q1"] += norms[1]
+                    log_dict["train/q_loss_grad_norm/q2"] += norms[2]
+                    log_dict["train/q_loss_grad_norm/p"] += norms[3]
                 q_optimizer.step()
                 q_optimizer.zero_grad()
 
@@ -447,6 +514,13 @@ if __name__ == "__main__":
 
                 p_loss = torch.mean(log_prob - q_sa_estimate)
                 p_loss.backward()
+
+                if training_step % config.loss_logging_frequency == 0:
+                    norms = calc_gradient_norms([v, q1, q2, p])
+                    log_dict["train/p_loss_grad_norm/v"] += norms[0]
+                    log_dict["train/p_loss_grad_norm/q1"] += norms[1]
+                    log_dict["train/p_loss_grad_norm/q2"] += norms[2]
+                    log_dict["train/p_loss_grad_norm/p"] += norms[3]
                 p_optimizer.step()
                 p_optimizer.zero_grad()
 
@@ -466,6 +540,13 @@ if __name__ == "__main__":
                 log_dict["train/q1_loss"] /= config.gradient_steps
                 log_dict["train/q2_loss"] /= config.gradient_steps
                 log_dict["train/p_loss"] /= config.gradient_steps
+
+            if training_step % config.loss_logging_frequency == 0:
+                network_param_norms = calc_parameter_norms([v, q1, q2, p])
+                log_dict["train/v_norm"] += network_param_norms[0]
+                log_dict["train/q1_norm"] += network_param_norms[1]
+                log_dict["train/q2_norm"] += network_param_norms[2]
+                log_dict["train/p_norm"] += network_param_norms[3]
 
         if terminated or truncated:
             total_reward = 0
