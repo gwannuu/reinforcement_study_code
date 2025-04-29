@@ -18,7 +18,8 @@ from lib import seed_setting
 
 #device = "mps"
 #device = "cuda:1"
-device = "cuda:3"
+#device = "cuda:3"
+device="cuda:2"
 
 
 @dataclass
@@ -43,11 +44,11 @@ class Config:
     gradient_steps: int = 1
     reward_scale_factor: float = 1 / 10
 
-    track: bool = False
-    capture_video: bool = False
+    track: bool = True
+    capture_video: bool = True
     # model_save_frequency: int = 50000  # env step
     loss_logging_frequency: int = 10000  # env step
-    eval_frequency: int = 100000  # env step
+    eval_frequency: int = 50000  # env step
     record_every_n_eval_steps: int = 5  # env step
 
 
