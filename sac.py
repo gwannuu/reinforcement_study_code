@@ -17,8 +17,8 @@ from tqdm import tqdm, trange
 from lib import seed_setting
 
 #device = "mps"
-device = "cuda:1"
-#device = "cuda:3"
+#device = "cuda:1"
+device = "cuda:3"
 
 
 @dataclass
@@ -27,8 +27,8 @@ class Config:
 
     torch_deterministic: bool = True
     seed: int = 42
-    train_env_seed: int = 1
-    eval_env_seed: int = 2
+    train_env_seed: int = 2
+    eval_env_seed: int = 4
     env_id: str = "Walker2d-v5"
 
     total_timesteps: int = 10000000
@@ -47,7 +47,7 @@ class Config:
     capture_video: bool = True
     # model_save_frequency: int = 50000  # env step
     loss_logging_frequency: int = 10000  # env step
-    eval_frequency: int = 100000  # env step
+    eval_frequency: int = 50000  # env step
     record_every_n_eval_steps: int = 5  # env step
 
 
