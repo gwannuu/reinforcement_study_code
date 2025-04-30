@@ -17,8 +17,10 @@ from tqdm import tqdm, trange
 from lib import seed_setting
 
 #device = "mps"
-device = "cuda:2"
+#device = "cuda:2"
 #device = "cuda:3"
+device = "cuda"
+
 class LogDict:
     def __init__(self, keys: list[str]):
         self.dict = {k: 0 for k in keys}
