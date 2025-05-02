@@ -370,6 +370,7 @@ if __name__ == "__main__":
     )
 
     obs, _ = env.reset(seed=config.train_env_seed)
+    _ = eval_env.reset(seed=config.eval_env_seed)
     training_step = 0
     # episode_step = 0
     total_reward = 0
@@ -416,7 +417,7 @@ if __name__ == "__main__":
                 record_states = []
                 eval_total_reward = 0
                 with torch.no_grad():
-                    eval_next, _ = eval_env.reset(seed=config.eval_env_seed)
+                    eval_next, _ = eval_env.reset()
                     if (
                         eval_num % config.record_every_n_eval_steps == 0
                         and config.capture_video
