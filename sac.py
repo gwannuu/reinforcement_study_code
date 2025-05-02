@@ -17,7 +17,7 @@ from tqdm import tqdm, trange
 from lib import seed_setting
 
 #device = "mps"
-device = "cuda:0"
+device = "cuda"
 #device = "cuda:3"
 class LogDict:
     def __init__(self, keys: list[str]):
@@ -68,17 +68,17 @@ class Config:
     batch_size: int = 256
     gamma: float = 0.99
     v_tau: float = 0.005
-    update_start_buffer_size: int = 50000
+    update_start_buffer_size: int = 5000
     train_frequency: int = 1
     num_update_per_train: int = 1
     gradient_steps: int = 1
     reward_scale_factor: float = 1 / 10
 
-    track: bool = False
-    capture_video: bool = False
+    track: bool = True
+    capture_video: bool = True
     # model_save_frequency: int = 50000  # env step
-    loss_logging_frequency: int = 5000  # env step
-    eval_frequency: int = 25000  # env step
+    loss_logging_frequency: int = 500  # env step
+    eval_frequency: int = 2500  # env step
     record_every_n_eval_steps: int = 5  # env step
     num_eval_episodes: int = 10
 

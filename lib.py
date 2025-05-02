@@ -14,3 +14,6 @@ def seed_setting(seed=42, deterministic=True):
     torch.manual_seed(seed)
     if "cuda" in device:
         torch.backends.cudnn.deterministic = deterministic
+
+    if deterministic:
+        torch.use_deterministic_algorithms(deterministic)
