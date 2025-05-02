@@ -507,7 +507,8 @@ if __name__ == "__main__":
                     )
 
                 v_optimizer.step()
-                v_optimizer.zero_grad()
+                for opt in [v_optimizer, p_optimizer, q_optimizer]:
+                    opt.zero_grad()
 
                 # Update Q
                 scaled_reward = reward_scaling(reward=data.reward, config=config)
@@ -533,7 +534,8 @@ if __name__ == "__main__":
                         values=norms,
                     )
                 q_optimizer.step()
-                q_optimizer.zero_grad()
+                for opt in [v_optimizer, p_optimizer, q_optimizer]:
+                    opt.zero_grad()
 
                 # Update Pi
                 output_ = p(data.state)
@@ -559,7 +561,8 @@ if __name__ == "__main__":
                         values=norms,
                     )
                 p_optimizer.step()
-                p_optimizer.zero_grad()
+                for opt in [v_optimizer, p_optimizer, q_optimizer]:
+                    opt.zero_grad()
 
                 # Update V soft
                 for soft_param, param in zip(v_soft.parameters(), v.parameters()):
