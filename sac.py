@@ -80,6 +80,7 @@ class Config:
     loss_logging_frequency: int = 10000  # env step
     eval_frequency: int = 50000  # env step
     record_every_n_eval_steps: int = 5  # env step
+    num_eval_episodes: int = 10
 
 
 if __name__ == "__main__":
@@ -323,7 +324,7 @@ if __name__ == "__main__":
         "train/q2_norm",
         "train/p_norm",
         "eval/average_reward",
-        "eval/total_reward",
+        "eval/average_total_reward",
     ]
 
     log_dict = LogDict(keys=keys)
@@ -411,74 +412,61 @@ if __name__ == "__main__":
             q1.eval()
             q2.eval()
             p.eval()
+            for eval_i in range(config.num_eval_episodes):
+                record_states = []
+                eval_total_reward = 0
+                with torch.no_grad():
+                    eval_next, _ = eval_env.reset(seed=config.eval_env_seed)
+                    if (
+                        eval_num % config.record_every_n_eval_steps == 0
+                        and config.capture_video
+                    ):
+                        record_states.append(eval_env.render())
+                    eval_terminated, eval_truncated = False, False
 
-            record_states = []
+                    while not (eval_terminated or eval_truncated):
+                        eval_s_ = convert_to_torch(eval_next, device=device)
+                        eval_pi_out = p(eval_s_)
+                        eval_a_, _ = p.sample_action(
+                            output=eval_pi_out, deterministic=True
+                        )
+                        eval_action = action_to_numpy(eval_a_)
+                        (
+                            eval_next,
+                            eval_reward,
+                            eval_terminated,
+                            eval_truncated,
+                            eval_info,
+                        ) = eval_env.step(action=eval_action)
+                        eval_total_reward += eval_reward
 
-            with torch.no_grad():
-                eval_next, _ = eval_env.reset(seed=config.eval_env_seed)
-                if (
-                    eval_num % config.record_every_n_eval_steps == 0
-                    and config.capture_video
-                ):
-                    record_states.append(eval_env.render())
-                # eval_s_ = convert_to_torch(eval_obs, device=device)
-                # eval_pi_out = p(eval_s_)
-                # eval_a_, _ = p.sample_action(output=eval_pi_out, deterministic=True)
-                # eval_action = action_to_numpy(eval_a_)
-                eval_terminated, eval_truncated = False, False
-                # eval_next = eval_s_
-                # (
-                #     eval_next,
-                #     eval_reward,
-                #     eval_terminated,
-                #     eval_truncated,
-                #     eval_info,
-                # ) = eval_env.step(action=eval_action)
+                        log_dict.add(
+                            keys=["eval/average_reward"],
+                            values=[eval_reward],
+                        )
 
-                # if (
-                #     eval_num % config.record_every_n_eval_steps == 0
-                #     and config.capture_video
-                # ):
-                #     record_states.append(eval_env.render())
-
-                # log_dict.add(
-                #     keys=["eval/total_reward", "eval/average_reward"],
-                #     values=[eval_reward, eval_reward],
-                # )
-                while not (eval_terminated or eval_truncated):
-                    eval_s_ = convert_to_torch(eval_next, device=device)
-                    eval_pi_out = p(eval_s_)
-                    eval_a_, _ = p.sample_action(output=eval_pi_out, deterministic=True)
-                    eval_action = action_to_numpy(eval_a_)
-                    (
-                        eval_next,
-                        eval_reward,
-                        eval_terminated,
-                        eval_truncated,
-                        eval_info,
-                    ) = eval_env.step(action=eval_action)
+                        if (
+                            eval_num % config.record_every_n_eval_steps == 0
+                            and config.capture_video
+                        ):
+                            record_states.append(eval_env.render())
 
                     log_dict.add(
-                        keys=["eval/total_reward", "eval/average_reward"],
-                        values=[eval_reward, eval_reward],
+                        keys=["eval/average_total_reward"],
+                        values=[eval_total_reward],
                     )
 
                     if (
                         eval_num % config.record_every_n_eval_steps == 0
                         and config.capture_video
                     ):
-                        record_states.append(eval_env.render())
+                        record_video(
+                            record_states,
+                            fps=60,
+                            filename=f"{eval_video_folder}/eval_at_training_step_{training_step}_{eval_i}.mp4",
+                        )
 
-                if (
-                    eval_num % config.record_every_n_eval_steps == 0
-                    and config.capture_video
-                ):
-                    record_video(
-                        record_states,
-                        fps=60,
-                        filename=f"{eval_video_folder}/eval_at_training_step_{training_step}.mp4",
-                    )
-
+            # end of evaluation
             v.train()
             v_soft.train()
             q1.train()
@@ -633,6 +621,7 @@ if __name__ == "__main__":
                     "train/q2_norm",
                     "train/p_norm",
                     "eval/average_reward",
+                    "eval/average_total_reward",
                 ],
             )
             logging = log_dict.extract()
