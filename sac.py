@@ -62,7 +62,7 @@ class Config:
     eval_env_seed: int = 2
     env_id: str = "Walker2d-v5"
 
-    total_timesteps: int = 10000000
+    total_timesteps: int = 5000000
     learning_rate: float = 3e-4
     buffer_size: int = 100000
     batch_size: int = 256
@@ -77,8 +77,8 @@ class Config:
     track: bool = False
     capture_video: bool = False
     # model_save_frequency: int = 50000  # env step
-    loss_logging_frequency: int = 10000  # env step
-    eval_frequency: int = 50000  # env step
+    loss_logging_frequency: int = 5000  # env step
+    eval_frequency: int = 25000  # env step
     record_every_n_eval_steps: int = 5  # env step
     num_eval_episodes: int = 10
 
