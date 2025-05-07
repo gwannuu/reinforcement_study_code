@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "ale-py>=0.10.2",
-    "gymnasium[other]>=1.0.0",
+    "gymnasium[mujoco,other]>=1.0.0",
     "numpy>=2.2.4",
     "opencv-python>=4.11.0.86",
     "stable-baselines3>=2.5.0",
