@@ -594,41 +594,40 @@ if __name__ == "__main__":
         if terminated or truncated:
             total_reward = 0
             obs, _ = env.reset()
-
+        log_dict.mean(
+            keys=[
+                "train/v_loss",
+                "train/q1_loss",
+                "train/q2_loss",
+                "train/p_loss",
+                "train/v_loss_grad_norm/v",
+                "train/v_loss_grad_norm/q1",
+                "train/v_loss_grad_norm/q2",
+                "train/v_loss_grad_norm/p",
+                "train/q_loss_grad_norm/v",
+                "train/q_loss_grad_norm/q1",
+                "train/q_loss_grad_norm/q2",
+                "train/q_loss_grad_norm/p",
+                "train/p_loss_grad_norm/v",
+                "train/p_loss_grad_norm/q1",
+                "train/p_loss_grad_norm/q2",
+                "train/p_loss_grad_norm/p",
+                "train/v_norm",
+                "train/q1_norm",
+                "train/q2_norm",
+                "train/p_norm",
+                "eval/average_reward",
+                "eval/average_total_reward",
+            ],
+        )
+        logging = log_dict.extract()
         if config.track:
-            log_dict.mean(
-                keys=[
-                    "train/v_loss",
-                    "train/q1_loss",
-                    "train/q2_loss",
-                    "train/p_loss",
-                    "train/v_loss_grad_norm/v",
-                    "train/v_loss_grad_norm/q1",
-                    "train/v_loss_grad_norm/q2",
-                    "train/v_loss_grad_norm/p",
-                    "train/q_loss_grad_norm/v",
-                    "train/q_loss_grad_norm/q1",
-                    "train/q_loss_grad_norm/q2",
-                    "train/q_loss_grad_norm/p",
-                    "train/p_loss_grad_norm/v",
-                    "train/p_loss_grad_norm/q1",
-                    "train/p_loss_grad_norm/q2",
-                    "train/p_loss_grad_norm/p",
-                    "train/v_norm",
-                    "train/q1_norm",
-                    "train/q2_norm",
-                    "train/p_norm",
-                    "eval/average_reward",
-                    "eval/average_total_reward",
-                ],
-            )
-            logging = log_dict.extract()
             wandb.log(logging, step=training_step)
             log_dict.reset()
-        else:
-            if len(log_dict.keys()) != 0:
+        elif training_step % config.loss_logging_frequency == 0:
+            if len(logging.keys()) != 0:
                 print("=" * 20 + f"training step: {training_step}" + "=" * 20)
-                for log_k, log_v in log_dict.items():
+                for log_k, log_v in logging.items():
                     print(f"log key: {log_k}, log value: {log_v:.3f} ")
                 print("=" * 60)
 
