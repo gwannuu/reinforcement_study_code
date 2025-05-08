@@ -12,9 +12,9 @@ from stable_baselines3.common.atari_wrappers import (
     FireResetEnv,
     ClipRewardEnv,
 )
-from dqn_atari import MyFireResetEnv, VecSkipEnv
+from dqn.dqn_atari import MyFireResetEnv, VecSkipEnv
 
-from dqn_atari_simulate import atari_four_image_concat
+from dqn.dqn_atari_simulate import atari_four_image_concat
 from stable_baselines3.common.type_aliases import AtariStepReturn, AtariResetReturn
 
 
@@ -195,7 +195,7 @@ def evaluate_vec(
 
 
 if __name__ == "__main__":
-    from dqn_atari import Args, QNetwork
+    from dqn.dqn_atari import Args, QNetwork
     from lib import device
     import wandb
     from tqdm import tqdm

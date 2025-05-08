@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from dqn_atari_simulate import atari_four_image_concat
+from dqn.dqn_atari_simulate import atari_four_image_concat
 from lib import device, seed_setting
 from stable_baselines3.common.buffers import ReplayBuffer
 from tqdm import trange
