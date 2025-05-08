@@ -246,7 +246,9 @@ class Policy(FC):
             action = normal_dist.rsample()
             log_probs = normal_dist.log_prob(action)
             log_prob = torch.sum(log_probs, dim=-1, keepdim=True)
-            log_prob -= torch.sum(torch.log(1 - torch.square(torch.tanh(action))) , dim=-1, keepdim=True)
+            log_prob -= torch.sum(
+                torch.log(1 - torch.square(torch.tanh(action))), dim=-1, keepdim=True
+            )
             action = torch.tanh(action)
             return action, log_prob
         else:
@@ -317,6 +319,10 @@ if __name__ == "__main__":
         "train/q1_norm",
         "train/q2_norm",
         "train/p_norm",
+        "train/p_mean_max",
+        "train/p_mean_min",
+        "train/p_log_std_max",
+        "train/p_log_std_min",
         "eval/average_reward",
         "eval/average_total_reward",
     ]
@@ -554,6 +560,27 @@ if __name__ == "__main__":
                         ],
                         values=norms,
                     )
+                    with torch.no_grad():
+                        logging_mean, logging_log_std = output_.chunk(2, dim=-1)
+                        logging_mean, logging_log_std = logging_mean.clone().detach(), logging_log_std.clone().detach()
+                        logging_max_mean, logging_max_log_std = torch.max(logging_mean), torch.max(logging_log_std)
+                        logging_min_mean, logging_min_log_std = torch.min(logging_mean), torch.min(logging_log_std)
+
+
+                    log_dict.add(
+                        keys=[
+                            "train/p_mean_max",
+                            "train/p_mean_min",
+                            "train/p_log_std_max",
+                            "train/p_log_std_min",
+                        ],
+                        values=[
+                            logging_max_mean.item(),
+                            logging_min_mean.item(),
+                            logging_max_log_std.item(),
+                            logging_min_log_std.item(),
+                        ],
+                    )
                 p_optimizer.step()
                 for opt in [v_optimizer, p_optimizer, q_optimizer]:
                     opt.zero_grad()
@@ -616,6 +643,10 @@ if __name__ == "__main__":
                 "train/q1_norm",
                 "train/q2_norm",
                 "train/p_norm",
+                "train/p_mean_max",
+                "train/p_mean_min",
+                "train/p_log_std_max",
+                "train/p_log_std_min",
                 "eval/average_reward",
                 "eval/average_total_reward",
             ],
