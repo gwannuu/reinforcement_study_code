@@ -10,12 +10,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from code_implementation.dqn_evaluate import make_env_evaluate
-from code_implementation.dqn_evaluate import evaluate
-from lib import device, seed_setting
 from stable_baselines3.common.buffers import ReplayBuffer
-from torch.utils.tensorboard import SummaryWriter
 from tqdm import trange
+
+from lib import device, seed_setting
 
 
 @dataclass
@@ -125,8 +123,9 @@ if __name__ == "__main__":
     args = Args()
     run_name = f"{args.env_id}__{args.exp_name}__{int(time.time())}"
     if args.track:
-        import wandb
         import os
+
+        import wandb
 
         wandb.login(key=os.environ["WANDB_API_KEY"])
         run = wandb.init(

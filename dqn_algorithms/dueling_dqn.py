@@ -14,7 +14,7 @@ from stable_baselines3.common.atari_wrappers import ClipRewardEnv, EpisodicLifeE
 from tqdm import tqdm
 
 import wandb
-from dqn.util import MyFireResetEnv
+from dqn_algorithms.util import MyFireResetEnv, SkipEnv
 from lib import calc_gradient_norms, make_id, record_video, seed_setting
 
 gym.register_envs(ale_py)
@@ -205,7 +205,7 @@ def make_single_atari_env(config: Config):
     env = gym.wrappers.FrameStackObservation(env, 4)
     env = EpisodicLifeEnv(env)
     env = MyFireResetEnv(env)
-
+    env = SkipEnv(env)
 
     return env
 

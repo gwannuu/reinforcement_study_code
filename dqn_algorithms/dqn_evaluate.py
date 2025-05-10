@@ -69,7 +69,7 @@ def evaluate(
 
 
 if __name__ == "__main__":
-    from dqn.dqn import Args, QNetwork
+    from dqn_algorithms.dqn import Args, QNetwork
     from lib import device
     from torch.utils.tensorboard import SummaryWriter
     from tqdm import tqdm

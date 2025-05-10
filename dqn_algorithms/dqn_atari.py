@@ -10,7 +10,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from dqn.dqn_atari_simulate import atari_four_image_concat
+from dqn_algorithms.dqn_atari_simulate import atari_four_image_concat
+from dqn_algorithms.util import MyFireResetEnv
 from lib import device, seed_setting
 from stable_baselines3.common.buffers import ReplayBuffer
 from tqdm import trange
@@ -24,7 +25,7 @@ from stable_baselines3.common.atari_wrappers import (
     NoopResetEnv,
 )
 
-from stable_baselines3.common.type_aliases import AtariResetReturn, AtariStepReturn
+from stable_baselines3.common.type_aliases import AtariStepReturn
 
 gym.register_envs(ale_py)
 
@@ -114,23 +115,6 @@ class VecSkipEnv(gym.Wrapper[np.ndarray, int, np.ndarray, int]):
                 break
 
         return obs, total_reward, terminated, truncated, info
-
-
-class MyFireResetEnv(gym.Wrapper[np.ndarray, int, np.ndarray, int]):
-    def __init__(self, env: gym.Env) -> None:
-        super().__init__(env)
-        assert env.unwrapped.get_action_meanings()[1] == "FIRE"  # type: ignore[attr-defined]
-        assert len(env.unwrapped.get_action_meanings()) >= 3  # type: ignore[attr-defined]
-
-    def reset(self, **kwargs) -> AtariResetReturn:
-        self.env.reset(**kwargs)
-        obs, _, terminated, truncated, _ = self.env.step(1)
-        if terminated or truncated:
-            self.env.reset(**kwargs)
-        obs, _, terminated, truncated, info = self.env.step(2)
-        if terminated or truncated:
-            self.env.reset(**kwargs)
-        return obs, info
 
 
 # def make_train_env_list(args):
