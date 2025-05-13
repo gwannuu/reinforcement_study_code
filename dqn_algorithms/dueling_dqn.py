@@ -20,16 +20,17 @@ from lib import calc_gradient_norms, make_id, record_video, seed_setting
 gym.register_envs(ale_py)
 
 run_id = make_id()
+env_name = "ALE/Breakout-v5"
+wandb_project: str = f"{env_name}/0".replace("/", "_")
+wandb_name: str = f"Dueling_DQN_{run_id}"
+wandb_notes: str | None = None
+wandb_tags: list[str] = ["Duelling DQN"]
 
 
 @dataclass
 class Config:
     file_name: str = os.path.basename(__file__)[: -len(".py")]
-    env_id: str = "ALE/Breakout-v5"
-    wandb_project: str = f"{env_id.split('/')[-1]}/0"
-    wandb_name: str = f"Dueling_DQN/{run_id}"
-    wandb_notes: str | None = None
-    wandb_tags: list[str] = ["Duelling DQN"]
+    env_id: str = env_name
 
     device = "cuda:0"
     torch_deterministic: bool = True
@@ -44,8 +45,11 @@ class Config:
     gamma: float = 0.99
     update_start_buffer_size: int = 50000
     train_frequency: int = 4
-    epsilon: float = 0.001
+    start_epsilon: float = 1
+    end_epsilon: float = 0.05
+    epsilon_decay_timestep: int = 1000000
     target_network_update_frequency: int = 500
+    shift_method: str = "mean"
 
     track: bool = False
     capture_video: bool = False
@@ -60,6 +64,7 @@ class LogDictKeys:
     eval_average_reward: str = "eval/average_total_reward"
     eval_average_time_steps: str = "eval/average_time_step"
     train_loss: str = "train/loss"
+    train_epsilon: str = "train/epsilon"
     train_loss_grad_norm: str = "train/loss_grad"
     train_param_norm: str = "train/parameter_norm"
     train_shifted_advantage_mean: str = "train/shifted_advantage_mean"
@@ -83,10 +88,6 @@ class LogDictKeys:
             for name, value in vars(cls).items()
             if not name.startswith("__") and isinstance(value, str)
         ]
-
-
-if __name__ == "__main__":
-    config = Config()
 
 
 class LogDict:
@@ -141,7 +142,10 @@ class ReplayBuffer:
         self.observations = np.zeros(
             (buffer_size, *observation_space.shape), dtype=np.float32
         )
-        self.actions = np.zeros((buffer_size, *action_space.shape), dtype=np.float32)
+        if len(action_space.shape) == 0:
+            self.actions = np.zeros((buffer_size, 1), dtype=np.int64)
+        else:
+            self.actions = np.zeros((buffer_size, *action_space.shape), dtype=np.int64)
         self.rewards = np.zeros((buffer_size, 1), dtype=np.float32)
         self.truncated = np.zeros((buffer_size, 1), dtype=np.int32)
         self.terminated = np.zeros((buffer_size, 1), dtype=np.int32)
@@ -194,13 +198,23 @@ def convert_to_torch(data, device=None):
     return data
 
 
+def np_state_to_torch_state(obs: np.ndarray, device=None):
+    state = convert_to_torch(obs, device=device)
+    state = state[None, ...]
+    return state
+
+def torch_action_to_np_state(action: torch.tensor):
+    action = action.cpu().numpy()
+    action = int(np.squeeze(action))
+    return action
+
 def make_single_atari_env(config: Config):
     if config.capture_video:
         env = gym.make(config.env_id, render_mode="rgb_array", frameskip=1)
     else:
         env = gym.make(config.env_id, frameskip=1)
     env = ClipRewardEnv(env)
-    env = gym.wrappers.ResizeObservation(env, (84,84))
+    env = gym.wrappers.ResizeObservation(env, (84, 84))
     env = gym.wrappers.GrayscaleObservation(env)
     env = gym.wrappers.FrameStackObservation(env, 4)
     env = EpisodicLifeEnv(env)
@@ -242,7 +256,9 @@ class DuelingNetwork(nn.Module):
             nn.Flatten(),
         )
         self.a = nn.Sequential(
-            nn.Linear(3136, 512), nn.ReLU(), nn.Linear(512, num_action)
+            nn.Linear(3136, 512),
+            nn.ReLU(),
+            nn.Linear(512, num_action),
         )
         self.v = nn.Sequential(
             nn.Linear(3136, 512),
@@ -252,52 +268,86 @@ class DuelingNetwork(nn.Module):
 
     def forward(self, x):
         x = self.nn(x / 255.0)
-        a, v = self.a(x), self.v(x)
-        return a, v
-
-    def calculate_q_value(self, value, advantage, method="mean"):
-        if method == "max":
-            shifted_advantage = advantage - torch.max(advantage, dim=-1, keepdim=True)
-        elif method == "mean":
-            shifted_advantage = advantage - torch.mean(advantage, dim=-1, keepdim=True)
-        elif method == "softmax":
-            shifted_advantage = advantage - torch.softmax(advantage, dim=-1)
-        else:
-            raise ValueError(
-                f"In function `shift_advantage`, Input argument method {method} is not verified"
-            )
-        q_value = value + shifted_advantage
-        return q_value, shifted_advantage
+        v, a = self.v(x), self.a(x)
+        return v, a
 
 
 class Policy:
-    def __init__(self, initial_epsilon: float, num_action: int):
-        self.initial_epsilon = initial_epsilon
+    def __init__(
+        self,
+        start_epsilon: float,
+        end_epsilon: float,
+        epsilon_decay_timestep: int,
+        num_action: int,
+        shift_method: str,
+    ):
+        self.start_epsilon = start_epsilon
+        self.end_epsilon = end_epsilon
+        self.epsilon_decay_timestep = epsilon_decay_timestep
         self.num_action = num_action
+        self.shift_method = shift_method
 
     def get_action_greedly(self, action_values):
         _, max_indices = torch.max(action_values, dim=-1, keepdim=True)
         return max_indices
 
-    def get_action(self, time_step, action_values):
-        if 1 - self.epsilon <= np.random.rand():
+    def get_action(self, time_step, action_values) -> int:
+        decay_rate = (
+            min(self.epsilon_decay_timestep, time_step) / self.epsilon_decay_timestep
+        )
+        prob = decay_rate * self.end_epsilon + (1 - decay_rate) * self.start_epsilon
+        if np.random.rand() < 1 - prob:
             max_indices = self.get_action_greedly(action_values)
-            return max_indices
+            max_indices = torch_action_to_np_state(max_indices)
+            return max_indices, prob
         else:
-            return np.random.randint(low=0, high=self.num_action)
+            return np.random.randint(low=0, high=self.num_action), prob
+
+    def get_shifted_advantage(self, advantage):
+        if self.shift_method == "max":
+            shifted_advantage = (
+                advantage - torch.max(advantage, dim=-1, keepdim=True)[0]
+            )
+        elif self.shift_method == "mean":
+            shifted_advantage = advantage - torch.mean(advantage, dim=-1, keepdim=True)
+        elif self.shift_method == "softmax":
+            shifted_advantage = advantage - torch.softmax(advantage, dim=-1)
+        else:
+            raise ValueError(
+                f"In function `shift_advantage`, Input argument self.shift_method {self.shift_method} is not verified"
+            )
+        return shifted_advantage
+
+    def calculate_q_value(self, network, state):
+        value, advantage = network(state)
+        shifted_advantage = self.get_shifted_advantage(advantage)
+        q_value = value + shifted_advantage
+        return value, advantage, shifted_advantage, q_value
 
 
 class DuelingDQNTrainer:
-    def __init__(self, config: Config, value_network: DuelingNetwork):
+    def __init__(
+        self,
+        config: Config,
+        value_network: DuelingNetwork,
+        env: gym.Env,
+        eval_env: gym.Env,
+    ):
         self.config = config
         self.value_network = value_network
         self.target_network = copy.deepcopy(self.value_network)
 
-        self.optimizer = optim.Adam(self.value_network.parameters(), lr=config.lr)
-        self.env = make_single_atari_env(config)
-        self.eval_env = make_single_atari_env(config)
+        self.optimizer = optim.Adam(
+            self.value_network.parameters(), lr=config.learning_rate
+        )
+        self.env = env
+        self.eval_env = eval_env
         self.policy = Policy(
-            initial_epsilon=config.epsilon, num_action=self.env.action_space.shape
+            start_epsilon=config.start_epsilon,
+            end_epsilon=config.end_epsilon,
+            epsilon_decay_timestep=config.epsilon_decay_timestep,
+            num_action=int(self.env.action_space.n),
+            shift_method=config.shift_method,
         )
         self.log_dict = LogDict(keys=LogDictKeys.all_str_keys())
         self.rb = ReplayBuffer(
@@ -308,30 +358,27 @@ class DuelingDQNTrainer:
             n_envs=1,
         )
 
-    def update_target_network(self):
-        self.target_network.load_state_dict(self.value_network.state_dict)
-
     # Logging related
     def wandb_init(self):
         wandb.Settings()
 
         wandb.login(key=os.environ["WANDB_API_KEY"])
         self.wandb_run = wandb.init(
-            project=self.config.wandb_project,
+            project=wandb_project,
             config=vars(self.config),
-            name=self.config.wandb_name,
+            name=wandb_name,
             id=run_id,
-            notes=self.config.wandb_notes,
-            tags=self.config.wandb_tags,
+            notes=wandb_notes,
+            tags=wandb_tags,
         )
 
     # Recording related
     def record_condition(self, eval_count):
-        return eval_count % self.config.record_every_n_eval_steps == 0
+        return eval_count % self.config.record_every_n_eval_steps == 0 and self.config.capture_video
 
     def get_eval_video_folder(self):
         eval_video_folder = (
-            f"runsf/{self.config.env_id}_{self.config.file_name}_{self.id}/eval/videos"
+            f"runs/{self.config.env_id}_{self.config.file_name}_{run_id}/eval/videos"
         )
         os.makedirs(eval_video_folder, exist_ok=True)
         return eval_video_folder
@@ -342,8 +389,8 @@ class DuelingDQNTrainer:
     def training_step_condition(self, time_step):
         return time_step % self.config.train_frequency == 0
 
-    def training_loss_logging_condition(self, time_step):
-        return time_step % self.config.loss_logging_frequency == 0
+    def training_loss_logging_condition(self, time_step, training_start):
+        return time_step % self.config.loss_logging_frequency == 0 and training_start
 
     def env_step_end(self, time_step: int, pbar):
         time_step += 1
@@ -353,15 +400,15 @@ class DuelingDQNTrainer:
     def target_network_update_condition(self, time_step):
         return time_step % self.config.target_network_update_frequency == 0
 
-    def logging(self, training_step):
+    def logging(self, time_step):
         self.log_dict.mean(keys=LogDictKeys.average_adjust_keys())
         logging = self.log_dict.extract()
         if config.track:
-            wandb.log(logging, step=training_step)
+            wandb.log(logging, step=time_step)
         elif len(logging.keys()) != 0:
-            print("=" * 20 + f"training step: {training_step}" + "=" * 20)
+            print("=" * 20 + f"training step: {time_step}" + "=" * 20)
             for log_k, log_v in logging.items():
-                print(f"log key: {log_k}, log value: {log_v:.3f} ")
+                print(f"{log_k} : {log_v:.3f} ")
             print("=" * 60)
         self.log_dict.reset()
 
@@ -371,30 +418,36 @@ class DuelingDQNTrainer:
 
         config = self.config
         eval_env = self.eval_env
-        state, _ = eval_env.reset(config.eval_env_seed)
+        obs, _ = eval_env.reset(seed=config.eval_env_seed)
+        state = np_state_to_torch_state(obs, device=config.device)
         for eval_episode_count in range(config.num_eval_episodes):
             done = False
             eval_total_reward = 0
             num_time_steps = 0
-            record_states = [] if not self.record_condition(eval_count) else None
-            state, _ = eval_env.reset()
+            record_states = [] if self.record_condition(eval_count) else None
 
             while not done:
                 if record_states is not None:
                     record_states.append(eval_env.render())
-                value, advantage = self.value_network(state)
-                q_estimated, shifted_advantage = self.value_network.calculate_q_value(
-                    value=value, advantage=advantage
+                value, advantage, shifted_advantage, q_value = (
+                    self.policy.calculate_q_value(
+                        network=self.value_network, state=state
+                    )
                 )
-                action = self.policy.get_action(action_values=q_estimated)
+                action = self.policy.get_action_greedly(action_values=q_value)
 
                 next_state, reward, terminated, truncated, _ = eval_env.step(
                     action=action
                 )
+
+                next_state = np_state_to_torch_state(next_state, device=config.device)
                 eval_total_reward += reward
                 done = terminated or truncated
                 state = next_state
                 num_time_steps += 1
+
+            obs, _ = eval_env.reset()
+            state = np_state_to_torch_state(obs, device=config.device)
 
             if record_states is not None:
                 record_states.append(eval_env.render())
@@ -402,45 +455,47 @@ class DuelingDQNTrainer:
             self.log_dict.add(
                 items={
                     LogDictKeys.eval_average_reward: eval_total_reward,
-                    LogDictKeys.eavl_average_time_steps: num_time_steps,
+                    LogDictKeys.eval_average_time_steps: num_time_steps,
                 }
             )
 
-            if self.record_condition(eval_count):
+            if self.record_condition(eval_count) and record_states is not None:
                 record_video(
                     record_states,
-                    fps=60,
-                    filename=f"{self.get_eval_video_folder}/time_step_{time_step}_eval_count_{eval_count}.mp4",
+                    fps=int(60/4),
+                    filename=f"{self.get_eval_video_folder()}/time_step_{time_step}_eval_count_{eval_count}_episode_{eval_episode_count}.mp4",
                 )
-                pass
 
         self.value_network.train()
 
-    def training_step(self):
+    def training_step(self, time_step):
         datas = self.rb.sample(batch_size=self.config.batch_size)
-
-        value, advantage = self.value_network(datas.state)
-        q_value, shifted_advantage = self.value_network.calculate_q_value(
-            value=value, advantage=advantage
+        value, advantage, shifted_advantage, q_value = self.policy.calculate_q_value(
+            network=self.value_network, state=datas.state
         )
-        q_estimate = q_value[:, datas.action]
+        q_estimate = torch.gather(q_value, dim=-1, index=datas.action)
 
         with torch.no_grad():
+            next_value, next_advantage, next_shifted_advantage, next_q_value = (
+                self.policy.calculate_q_value(
+                    network=self.target_network, state=datas.next_state
+                )
+            )
             q_target = datas.reward + (1 - datas.terminated) * (
-                config.gamma * self.target_network(datas.next_state)
+                config.gamma * torch.max(next_q_value, dim=-1, keepdim=True)[0]
             )
 
         loss = F.mse_loss(input=q_estimate, target=q_target)
         loss.backward()
         self.optimizer.step()
-        if self.training_loss_logging_condition():
-            gradient_norm = calc_gradient_norms(
-                networks=list(self.value_network.parameters())
-            )
-            network_norm = calc_gradient_norms(networks=list(self.value_network))
+        if self.training_loss_logging_condition(time_step=time_step, training_start=True):
+            gradient_norm = calc_gradient_norms(networks=[self.value_network])[0]
+            network_norm = calc_gradient_norms(networks=[self.value_network])[0]
             with torch.no_grad():
                 shifted_advantage_mean = torch.mean(shifted_advantage)
-                shifted_advantage_max = torch.mean(torch.max(shifted_advantage, dim=-1))
+                shifted_advantage_max = torch.mean(
+                    torch.max(shifted_advantage, dim=-1)[0]
+                )
                 value_mean = torch.mean(value)
                 q_value_mean = torch.mean(q_estimate)
 
@@ -453,7 +508,7 @@ class DuelingDQNTrainer:
                     LogDictKeys.train_shifted_advantage_max: shifted_advantage_max,
                     LogDictKeys.train_value_mean: value_mean,
                     LogDictKeys.train_q_value_mean: q_value_mean,
-                    LogDictKeys.train_replay_buffer_pointer: self.rb.ptr,
+                    LogDictKeys.train_replay_buffer_ptr: self.rb.ptr,
                     LogDictKeys.train_replay_buffer_size: self.rb.cur_size,
                 }
             )
@@ -466,24 +521,49 @@ class DuelingDQNTrainer:
         if config.track:
             self.wandb_init()
         env, eval_env = self.env, self.eval_env
+        self.value_network.to(config.device)
+        self.target_network.to(config.device)
 
         time_step = 0
         eval_count = 0
         pbar = tqdm(total=config.total_timesteps)
         while time_step < config.total_timesteps:
+            training_start = self.rb.cur_size >= config.update_start_buffer_size
+
+            if training_start:
+                if self.eval_step_condition(time_step=time_step):
+                    self.eval_step(time_step=time_step, eval_count=eval_count)
+                    eval_count += 1
+
+                if self.training_step_condition(time_step=time_step):
+                    self.training_step(time_step=time_step)
+
+                if self.target_network_update_condition(time_step=time_step):
+                    self.target_network.load_state_dict(self.value_network.state_dict())
+
+
+                if self.training_loss_logging_condition(time_step=time_step, training_start=training_start):
+                    self.logging(time_step=time_step)
+
+                time_step = self.env_step_end(time_step=time_step, pbar=pbar)
+
             obs, _ = env.reset(seed=config.train_env_seed)
             _ = eval_env.reset(seed=config.eval_env_seed)
 
-            state = convert_to_torch(obs, device=self.config.device)
+            state = np_state_to_torch_state(obs, device=config.device)
             with torch.no_grad():
-                value, advantage = self.value_network(state)
-                q_value, shifted_advantage = self.value_network.calculate_q_value(
-                    value=value, advantage=advantage
+                value, advantage, shifted_advantage, q_value = (
+                    self.policy.calculate_q_value(
+                        network=self.value_network, state=state
+                    )
                 )
+                action, epsilon = self.policy.get_action(
+                    time_step=time_step, action_values=q_value
+                )
+                if self.training_loss_logging_condition(time_step=time_step, training_start=training_start):
+                    self.log_dict.add(items={LogDictKeys.train_epsilon: epsilon})
 
-                action = self.policy.get_action(action_values=q_value)
             next_obs, reward, terminated, truncated, info = env.step(action)
-
             self.rb.add(
                 obs=obs,
                 next_obs=next_obs,
@@ -493,22 +573,15 @@ class DuelingDQNTrainer:
                 truncated=truncated,
             )
             obs = next_obs
-
-            if self.rb.cur_size < config.update_start_buffer_size:
-                continue
-
-            if self.eval_step_condition(time_step):
-                self.eval_step(time_step=time_step, eval_count=eval_count)
-                eval_count += 1
-
-            if self.training_step_condition(time_step):
-                self.training_step()
-
-            if self.target_network_update_condition(time_step):
-                self.update_target_network()
-
-            self.logging(time_step)
-
-            self.env_step_end(time_step=time_step, pbar=pbar)
-
         pbar.close()
+
+
+if __name__ == "__main__":
+    config = Config()
+    env = make_single_atari_env(config)
+    eval_env = make_single_atari_env(config)
+    value_network = DuelingNetwork(num_action=int(env.action_space.n))
+    dueling_dqn_trainer = DuelingDQNTrainer(
+        config=config, value_network=value_network, env=env, eval_env=eval_env
+    )
+    dueling_dqn_trainer.train()
