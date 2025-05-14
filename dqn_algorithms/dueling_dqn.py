@@ -1,6 +1,7 @@
 import copy
 import os
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, NamedTuple
 
 import ale_py
@@ -200,7 +201,6 @@ def convert_to_torch(data, device=None):
 
 def np_state_to_torch_state(obs: np.ndarray, device=None):
     state = convert_to_torch(obs, device=device)
-    state = state[None, ...]
     return state
 
 def torch_action_to_np_state(action: torch.tensor):
@@ -223,6 +223,10 @@ def make_single_atari_env(config: Config):
 
     return env
 
+def make_vector_atari_env(config: Config):
+    fn = partial(make_single_atari_env, config)
+    env = gym.vector.SyncVectorEnv([fn])
+    return env
 
 class FC(nn.Module):
     def __init__(self, input_dim, output_dim):
@@ -291,7 +295,7 @@ class Policy:
         _, max_indices = torch.max(action_values, dim=-1, keepdim=True)
         return max_indices
 
-    def get_action(self, time_step, action_values) -> int:
+    def get_action(self, time_step, action_values) -> np.ndarray:
         decay_rate = (
             min(self.epsilon_decay_timestep, time_step) / self.epsilon_decay_timestep
         )
@@ -301,7 +305,7 @@ class Policy:
             max_indices = torch_action_to_np_state(max_indices)
             return max_indices, prob
         else:
-            return np.random.randint(low=0, high=self.num_action), prob
+            return np.array([np.random.randint(low=0, high=self.num_action)]), prob
 
     def get_shifted_advantage(self, advantage):
         if self.shift_method == "max":
@@ -346,14 +350,14 @@ class DuelingDQNTrainer:
             start_epsilon=config.start_epsilon,
             end_epsilon=config.end_epsilon,
             epsilon_decay_timestep=config.epsilon_decay_timestep,
-            num_action=int(self.env.action_space.n),
+            num_action=int(self.env.single_action_space.n),
             shift_method=config.shift_method,
         )
         self.log_dict = LogDict(keys=LogDictKeys.all_str_keys())
         self.rb = ReplayBuffer(
             buffer_size=config.buffer_size,
-            observation_space=self.env.observation_space,
-            action_space=self.env.action_space,
+            observation_space=self.env.single_observation_space,
+            action_space=self.env.single_action_space,
             device=self.config.device,
             n_envs=1,
         )
@@ -428,7 +432,7 @@ class DuelingDQNTrainer:
 
             while not done:
                 if record_states is not None:
-                    frame = eval_env.render()
+                    frame = eval_env.render()[0]
                     record_states.append(frame)
 
                     if num_time_steps > 300:
@@ -445,7 +449,7 @@ class DuelingDQNTrainer:
                 action = self.policy.get_action_greedly(action_values=q_value)
 
                 next_state, reward, terminated, truncated, _ = eval_env.step(
-                    action=action
+                    action
                 )
 
                 next_state = np_state_to_torch_state(next_state, device=config.device)
@@ -458,7 +462,7 @@ class DuelingDQNTrainer:
             state = np_state_to_torch_state(obs, device=config.device)
 
             if record_states is not None:
-                record_states.append(eval_env.render())
+                record_states.append(eval_env.render()[0])
 
             self.log_dict.add(
                 items={
@@ -586,9 +590,9 @@ class DuelingDQNTrainer:
 
 if __name__ == "__main__":
     config = Config()
-    env = make_single_atari_env(config)
-    eval_env = make_single_atari_env(config)
-    value_network = DuelingNetwork(num_action=int(env.action_space.n))
+    env = make_vector_atari_env(config)
+    eval_env = make_vector_atari_env(config)
+    value_network = DuelingNetwork(num_action=int(env.single_action_space.n))
     dueling_dqn_trainer = DuelingDQNTrainer(
         config=config, value_network=value_network, env=env, eval_env=eval_env
     )
