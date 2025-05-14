@@ -41,9 +41,9 @@ class Config:
     total_timesteps: int = 2500000
     learning_rate: float = 3e-4
     buffer_size: int = 100000
-    batch_size: int = 256
+    batch_size: int = 2
     gamma: float = 0.99
-    update_start_buffer_size: int = 50000
+    update_start_buffer_size: int = 2
     train_frequency: int = 4
     start_epsilon: float = 1
     end_epsilon: float = 0.05
@@ -52,10 +52,10 @@ class Config:
     shift_method: str = "mean"
 
     track: bool = False
-    capture_video: bool = False
+    capture_video: bool = True
     # model_save_frequency: int = 50000  # env step
-    loss_logging_frequency: int = 5000  # env step
-    eval_frequency: int = 25000  # env step
+    loss_logging_frequency: int = 500  # env step
+    eval_frequency: int = 1  # env step
     record_every_n_eval_steps: int = 5  # env step
     num_eval_episodes: int = 10
 
@@ -428,7 +428,15 @@ class DuelingDQNTrainer:
 
             while not done:
                 if record_states is not None:
-                    record_states.append(eval_env.render())
+                    frame = eval_env.render()
+                    record_states.append(frame)
+
+                    if num_time_steps > 300:
+
+                        import cv2
+                        cv2.imshow("", frame)
+                        cv2.waitKey()
+                        print(f"{num_time_steps}")
                 value, advantage, shifted_advantage, q_value = (
                     self.policy.calculate_q_value(
                         network=self.value_network, state=state
