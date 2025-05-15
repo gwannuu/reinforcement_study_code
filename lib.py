@@ -40,6 +40,16 @@ def calc_parameter_norms(networks: list[nn.Module]):
         norms.append(norm)
     return norms
 
+def network_diff_generator(network: nn.Module, target_network: nn.Module):
+    for (_, param), (_, target_param) in zip(network.named_parameters(), target_network.named_parameters()):
+        yield target_param - param
+
+@torch.no_grad()
+def target_network_diff(network: nn.Module, target_network: nn.Module):
+    diff_tensors = list(network_diff_generator(network=network, target_network=target_network))
+    norm = nn.utils.get_total_norm(tensors=diff_tensors)
+    return norm
+
 
 def record_video(seq: list[np.ndarray], fps: int, filename: str):
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
