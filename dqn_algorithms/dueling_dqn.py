@@ -490,7 +490,7 @@ class DuelingDQNTrainer:
         self.optimizer.step()
         if self.training_loss_logging_condition(time_step=time_step, training_start=True):
             gradient_norm = calc_gradient_norms(networks=[self.value_network])[0]
-            network_norm = calc_gradient_norms(networks=[self.value_network])[0]
+            network_norm = calc_parameter_norms(networks=[self.value_network])[0]
             with torch.no_grad():
                 shifted_advantage_mean = torch.mean(shifted_advantage)
                 shifted_advantage_max = torch.mean(
