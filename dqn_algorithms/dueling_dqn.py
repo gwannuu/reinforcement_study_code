@@ -30,8 +30,10 @@ run_id = make_id()
 env_name = "ALE/Breakout-v5"
 wandb_project: str = f"{env_name}/0".replace("/", "_")
 wandb_name: str = f"Dueling_DQN_{run_id}"
-wandb_notes: str | None = "Init dueling DQN (compared to DQN). Drop Learning rate 3e-4 -> 1e-4(vs 20250515-130539)"
-wandb_tags: list[str] = ["Duelling DQN", "Drop lr"]
+wandb_notes: str | None = (
+    "Try to discover why performance increase is not occured. Move position of parameter diff and add reward_mean log key (vs 20250515-130539)"
+)
+wandb_tags: list[str] = ["Duelling DQN", "Move position of parameter diff", "add reward_mean log key"]
 
 
 @dataclass
@@ -72,6 +74,7 @@ class LogDictKeys:
     eval_average_time_steps: str = "eval/average_time_step"
     train_loss: str = "train/loss"
     train_epsilon: str = "train/epsilon"
+    train_mean_reward: str = "train/reward_mean"
     train_loss_grad_norm: str = "train/loss_grad"
     train_param_norm: str = "train/parameter_norm"
     train_param_diff_norm: str = "train/parameter_diff_norm"
@@ -497,6 +500,7 @@ class DuelingDQNTrainer:
             q_target = datas.reward + (1 - datas.terminated) * (
                 config.gamma * torch.max(next_q_value, dim=-1, keepdim=True)[0]
             )
+            reward_mean = torch.mean(datas.reward)
 
         loss = F.mse_loss(input=q_estimate, target=q_target)
         loss.backward()
@@ -526,6 +530,7 @@ class DuelingDQNTrainer:
                     LogDictKeys.train_q_value_mean: q_value_mean,
                     LogDictKeys.train_replay_buffer_ptr: self.rb.ptr,
                     LogDictKeys.train_replay_buffer_size: self.rb.cur_size,
+                    LogDictKeys.train_mean_reward: reward_mean,
                 }
             )
 
