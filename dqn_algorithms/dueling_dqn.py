@@ -23,7 +23,7 @@ run_id = make_id()
 env_name = "ALE/Breakout-v5"
 wandb_project: str = f"{env_name}/0".replace("/", "_")
 wandb_name: str = f"Dueling_DQN_{run_id}"
-wandb_notes: str | None = None
+wandb_notes: str | None = "First dueling dqn experiment with comparing original DQN"
 wandb_tags: list[str] = ["Duelling DQN"]
 
 
@@ -51,8 +51,8 @@ class Config:
     target_network_update_frequency: int = 500
     shift_method: str = "mean"
 
-    track: bool = False
-    capture_video: bool = False
+    track: bool = True
+    capture_video: bool = True
     # model_save_frequency: int = 50000  # env step
     loss_logging_frequency: int = 5000  # env step
     eval_frequency: int = 25000  # env step
