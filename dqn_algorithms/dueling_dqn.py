@@ -103,11 +103,13 @@ class LogDict:
     def __init__(self, keys: list[str]):
         self.dict = {k: 0 for k in keys}
         self.step_dict = {k: 0 for k in keys}
+        self.logged = False
 
     def add(self, items: dict[str, Any]):
         for k, v in items.items():
             self.dict[k] += v
             self.step_dict[k] += 1
+            self.logged = True
 
     def mean(self, keys: list[str]):
         for k in keys:
@@ -120,6 +122,7 @@ class LogDict:
         for k in self.dict.keys():
             self.dict[k] = 0
             self.step_dict[k] = 0
+        self.logged = False
 
     def extract(self):
         out = {}
@@ -130,6 +133,8 @@ class LogDict:
                 out[k] = self.dict[k]
         return out
 
+    def is_needed_to_log(self):
+        return self.logged
 
 class BufferData(NamedTuple):
     state: torch.Tensor
@@ -572,9 +577,7 @@ class DuelingDQNTrainer:
                             }
                         )
 
-                if self.training_loss_logging_condition(
-                    time_step=time_step, training_start=training_start
-                ):
+                if self.log_dict.is_needed_to_log():
                     self.logging(time_step=time_step)
 
                 time_step = self.env_step_end(time_step=time_step, pbar=pbar)
