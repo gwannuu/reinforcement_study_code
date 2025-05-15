@@ -482,13 +482,6 @@ class DuelingDQNTrainer:
         self.value_network.train()
 
     def training_step(self, time_step):
-        if self.training_loss_logging_condition(
-            time_step=time_step, training_start=True
-        ):
-            diff_from_target_norm = target_network_diff(
-                network=self.value_network, target_network=self.target_network
-            )
-
         datas = self.rb.sample(batch_size=self.config.batch_size)
         value, advantage, shifted_advantage, q_value = self.policy.calculate_q_value(
             network=self.value_network, state=datas.state
@@ -513,9 +506,6 @@ class DuelingDQNTrainer:
         ):
             gradient_norm = calc_gradient_norms(networks=[self.value_network])[0]
             network_norm = calc_parameter_norms(networks=[self.value_network])[0]
-            diff_from_target_norm = target_network_diff(
-                network=self.value_network, target_network=self.target_network
-            )
 
             with torch.no_grad():
                 shifted_advantage_mean = torch.mean(shifted_advantage)
@@ -536,7 +526,6 @@ class DuelingDQNTrainer:
                     LogDictKeys.train_q_value_mean: q_value_mean,
                     LogDictKeys.train_replay_buffer_ptr: self.rb.ptr,
                     LogDictKeys.train_replay_buffer_size: self.rb.cur_size,
-                    LogDictKeys.train_param_diff_norm: diff_from_target_norm,
                 }
             )
 
@@ -567,6 +556,18 @@ class DuelingDQNTrainer:
 
                 if self.target_network_update_condition(time_step=time_step):
                     self.target_network.load_state_dict(self.value_network.state_dict())
+                    if self.training_loss_logging_condition(
+                        time_step=time_step, training_start=True
+                    ):
+                        diff_from_target_norm = target_network_diff(
+                            network=self.value_network,
+                            target_network=self.target_network,
+                        )
+                        self.log_dict.add(
+                            items={
+                                LogDictKeys.train_param_diff_norm: diff_from_target_norm
+                            }
+                        )
 
                 if self.training_loss_logging_condition(
                     time_step=time_step, training_start=training_start
