@@ -30,10 +30,8 @@ run_id = make_id()
 env_name = "ALE/Breakout-v5"
 wandb_project: str = f"{env_name}/0".replace("/", "_")
 wandb_name: str = f"Dueling_DQN_{run_id}"
-wandb_notes: str | None = (
-    "Try to discover why performance increase is not occured. Move position of parameter diff and add reward_mean log key (vs 20250515-130539)"
-)
-wandb_tags: list[str] = ["Duelling DQN", "Move position of parameter diff", "add reward_mean log key"]
+wandb_notes: str | None = None
+wandb_tags: list[str] = ["Duelling DQN"]
 
 
 @dataclass
@@ -48,7 +46,7 @@ class Config:
     eval_env_seed: int = 2
 
     total_timesteps: int = 2500000
-    learning_rate: float = 1e-4
+    learning_rate: float = 3e-4
     buffer_size: int = 100000
     batch_size: int = 256
     gamma: float = 0.99
@@ -60,8 +58,8 @@ class Config:
     target_network_update_frequency: int = 500
     shift_method: str = "mean"
 
-    track: bool = True
-    capture_video: bool = True
+    track: bool = False
+    capture_video: bool = False
     # model_save_frequency: int = 50000  # env step
     loss_logging_frequency: int = 5000  # env step
     eval_frequency: int = 25000  # env step
