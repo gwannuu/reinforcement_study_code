@@ -436,10 +436,12 @@ class DuelingDQNTrainer:
         self.value_network.eval()
 
         config = self.config
-        eval_env = self.eval_env
-        obs, _ = eval_env.reset(seed=config.eval_env_seed)
-        state = np_state_to_torch_state(obs, device=config.device)
+        env = self.eval_env
         for eval_episode_count in range(config.num_eval_episodes):
+            obs, _ = env.reset(
+                seed=config.eval_env_seed if eval_episode_count == 0 else None
+            )
+            state = np_state_to_torch_state(obs, device=config.device)
             done = False
             eval_total_reward = 0
             num_time_steps = 0
@@ -447,7 +449,7 @@ class DuelingDQNTrainer:
 
             while not done:
                 if record_states is not None:
-                    record_states.append(eval_env.render())
+                    record_states.append(env.render())
                 value, advantage, shifted_advantage, q_value = (
                     self.policy.calculate_q_value(
                         network=self.value_network, state=state
@@ -455,9 +457,7 @@ class DuelingDQNTrainer:
                 )
                 action = self.policy.get_action_greedly(action_values=q_value)
 
-                next_state, reward, terminated, truncated, _ = eval_env.step(
-                    action=action
-                )
+                next_state, reward, terminated, truncated, _ = env.step(action=action)
 
                 next_state = np_state_to_torch_state(next_state, device=config.device)
                 eval_total_reward += reward
@@ -465,11 +465,8 @@ class DuelingDQNTrainer:
                 state = next_state
                 num_time_steps += 1
 
-            obs, _ = eval_env.reset()
-            state = np_state_to_torch_state(obs, device=config.device)
-
             if record_states is not None:
-                record_states.append(eval_env.render())
+                record_states.append(env.render())
 
             self.log_dict.add(
                 items={
@@ -544,13 +541,14 @@ class DuelingDQNTrainer:
         seed_setting(config.seed, config.torch_deterministic)
         if config.track:
             self.wandb_init()
-        env, eval_env = self.env, self.eval_env
+        env = self.env
         self.value_network.to(config.device)
         self.target_network.to(config.device)
 
         time_step = 0
         eval_count = 0
         pbar = tqdm(total=config.total_timesteps)
+        obs, _ = env.reset(seed=config.train_env_seed)
         while time_step < config.total_timesteps:
             training_start = self.rb.cur_size >= config.update_start_buffer_size
 
@@ -582,9 +580,6 @@ class DuelingDQNTrainer:
 
                 time_step = self.env_step_end(time_step=time_step, pbar=pbar)
 
-            obs, _ = env.reset(seed=config.train_env_seed)
-            _ = eval_env.reset(seed=config.eval_env_seed)
-
             state = np_state_to_torch_state(obs, device=config.device)
             with torch.no_grad():
                 value, advantage, shifted_advantage, q_value = (
@@ -609,6 +604,9 @@ class DuelingDQNTrainer:
                 terminated=terminated,
                 truncated=truncated,
             )
+
+            if terminated or truncated:
+                next_obs, info = env.reset()
             obs = next_obs
         pbar.close()
 
