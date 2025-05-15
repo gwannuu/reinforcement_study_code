@@ -30,8 +30,8 @@ run_id = make_id()
 env_name = "ALE/Breakout-v5"
 wandb_project: str = f"{env_name}/0".replace("/", "_")
 wandb_name: str = f"Dueling_DQN_{run_id}"
-wandb_notes: str | None = None
-wandb_tags: list[str] = ["Duelling DQN"]
+wandb_notes: str | None = "Init dueling DQN (compared to DQN). Drop Learning rate 3e-4 -> 1e-4(vs 20250515-130539)"
+wandb_tags: list[str] = ["Duelling DQN", "Drop lr"]
 
 
 @dataclass
@@ -46,7 +46,7 @@ class Config:
     eval_env_seed: int = 2
 
     total_timesteps: int = 2500000
-    learning_rate: float = 3e-4
+    learning_rate: float = 1e-4
     buffer_size: int = 100000
     batch_size: int = 256
     gamma: float = 0.99
@@ -58,8 +58,8 @@ class Config:
     target_network_update_frequency: int = 500
     shift_method: str = "mean"
 
-    track: bool = False
-    capture_video: bool = False
+    track: bool = True
+    capture_video: bool = True
     # model_save_frequency: int = 50000  # env step
     loss_logging_frequency: int = 5000  # env step
     eval_frequency: int = 25000  # env step
