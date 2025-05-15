@@ -217,9 +217,9 @@ def make_single_atari_env(config: Config):
     env = gym.wrappers.ResizeObservation(env, (84, 84))
     env = gym.wrappers.GrayscaleObservation(env)
     env = gym.wrappers.FrameStackObservation(env, 4)
+    env = SkipEnv(env)
     env = EpisodicLifeEnv(env)
     env = MyFireResetEnv(env)
-    env = SkipEnv(env)
 
     return env
 
