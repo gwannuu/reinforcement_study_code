@@ -54,6 +54,7 @@ class Config:
     train_frequency: int = 4
     start_epsilon: float = 1
     end_epsilon: float = 0.05
+    target_epsilon: float = 0.05
     epsilon_decay_timestep: int = 1000000
     target_network_update_frequency: int = 500
     shift_method: str = "mean"
@@ -302,12 +303,14 @@ class Policy:
         start_epsilon: float,
         end_epsilon: float,
         epsilon_decay_timestep: int,
+        target_epsilon: float,
         num_action: int,
         shift_method: str,
     ):
         self.start_epsilon = start_epsilon
         self.end_epsilon = end_epsilon
         self.epsilon_decay_timestep = epsilon_decay_timestep
+        self.target_epsilon = target_epsilon
         self.num_action = num_action
         self.shift_method = shift_method
 
@@ -315,7 +318,15 @@ class Policy:
         _, max_indices = torch.max(action_values, dim=-1, keepdim=True)
         return max_indices
 
-    def get_action(self, time_step, action_values) -> int:
+    def get_action_by_target_policy(self, action_values) -> int:
+        if np.random.rand() < 1 - self.target_epsilon:
+            max_indices = self.get_action_greedly(action_values)
+            max_indices = torch_action_to_np_state(max_indices)
+            return max_indices, self.target_epsilon
+        else:
+            return np.random.randint(low=0, high=self.num_action), self.target_epsilon
+
+    def get_action_by_behavior_policy(self, time_step, action_values) -> int:
         decay_rate = (
             min(self.epsilon_decay_timestep, time_step) / self.epsilon_decay_timestep
         )
@@ -370,6 +381,7 @@ class DuelingDQNTrainer:
             start_epsilon=config.start_epsilon,
             end_epsilon=config.end_epsilon,
             epsilon_decay_timestep=config.epsilon_decay_timestep,
+            target_epsilon=config.target_epsilon,
             num_action=int(self.env.action_space.n),
             shift_method=config.shift_method,
         )
@@ -463,7 +475,7 @@ class DuelingDQNTrainer:
                         network=self.value_network, state=state
                     )
                 )
-                action = self.policy.get_action_greedly(action_values=q_value)
+                action, _ = self.policy.get_action_by_target_policy(action_value=q_value)
 
                 next_state, reward, terminated, truncated, _ = env.step(action=action)
 
@@ -595,7 +607,7 @@ class DuelingDQNTrainer:
                         network=self.value_network, state=state
                     )
                 )
-                action, epsilon = self.policy.get_action(
+                action, epsilon = self.policy.get_action_by_behavior_policy(
                     time_step=time_step, action_values=q_value
                 )
                 if self.training_loss_logging_condition(
