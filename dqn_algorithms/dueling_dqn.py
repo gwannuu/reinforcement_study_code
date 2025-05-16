@@ -54,7 +54,7 @@ class Config:
     update_start_buffer_size: int = 50000
     train_frequency: int = 4
     start_epsilon: float = 1
-    end_epsilon: float = 0.05
+    end_epsilon: float = 0.1
     target_epsilon: float = 0.05
     epsilon_decay_timestep: int = 1000000
     target_network_update_frequency: int = 500
