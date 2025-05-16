@@ -229,9 +229,9 @@ def torch_action_to_np_state(action: torch.tensor):
 
 def make_single_atari_env(config: Config):
     if config.capture_video:
-        env = gym.make(config.env_id, render_mode="rgb_array", frameskip=1)
+        env = gym.make(config.env_id, render_mode="rgb_array", frameskip=1, repeat_action_probability=0)
     else:
-        env = gym.make(config.env_id, frameskip=1)
+        env = gym.make(config.env_id, frameskip=1, repeat_action_probability=0)
     env = ClipRewardEnv(env)
     env = gym.wrappers.ResizeObservation(env, (84, 84))
     env = gym.wrappers.GrayscaleObservation(env)
