@@ -31,8 +31,15 @@ run_id = make_id()
 env_name = "ALE/Breakout-v5"
 wandb_project: str = f"{env_name}/0".replace("/", "_")
 wandb_name: str = f"Dueling_DQN_{run_id}"
-wandb_notes: str | None = "Fix some bugs (wrongly env reset bug & and guard non-fired reset). "
-wandb_tags: list[str] = ["Duelling DQN"]
+wandb_notes: str | None = (
+    "Make target policy epsilon greedy with 0.05, behavior policy end_epsilon 0.1 & Remove sticky action"
+)
+wandb_tags: list[str] = [
+    "Duelling DQN",
+    "Target policy epsilon greedy",
+    "Modify behavior policy",
+    "Remove sticky action",
+]
 
 
 @dataclass
@@ -229,7 +236,12 @@ def torch_action_to_np_state(action: torch.tensor):
 
 def make_single_atari_env(config: Config):
     if config.capture_video:
-        env = gym.make(config.env_id, render_mode="rgb_array", frameskip=1, repeat_action_probability=0)
+        env = gym.make(
+            config.env_id,
+            render_mode="rgb_array",
+            frameskip=1,
+            repeat_action_probability=0,
+        )
     else:
         env = gym.make(config.env_id, frameskip=1, repeat_action_probability=0)
     env = ClipRewardEnv(env)
