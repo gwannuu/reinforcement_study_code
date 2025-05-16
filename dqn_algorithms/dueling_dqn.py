@@ -31,8 +31,8 @@ run_id = make_id()
 env_name = "ALE/Breakout-v5"
 wandb_project: str = f"{env_name}/0".replace("/", "_")
 wandb_name: str = f"Dueling_DQN_{run_id}"
-wandb_notes: str | None = "Fix some bugs (wrongly env reset bug & and guard non-fired reset). "
-wandb_tags: list[str] = ["Duelling DQN"]
+wandb_notes: str | None = "Make target policy epsilon greedy with 0.05, behavior policy end_epsilon 0.1"
+wandb_tags: list[str] = ["Duelling DQN", 'Target policy epsilon greedy', 'Modify behavior policy']
 
 
 @dataclass
