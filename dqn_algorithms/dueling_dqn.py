@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, NamedTuple
 
 import ale_py
+import cv2
 import gymnasium as gym
 import numpy as np
 import torch
@@ -18,10 +19,10 @@ from dqn_algorithms.util import MyFireResetEnv, SkipEnv
 from lib import (
     calc_gradient_norms,
     calc_parameter_norms,
-    target_network_diff,
     make_id,
     record_video,
     seed_setting,
+    target_network_diff,
 )
 
 gym.register_envs(ale_py)
@@ -240,6 +241,53 @@ def make_single_atari_env(config: Config):
     env = MyFireResetEnv(env)
 
     return env
+
+
+def append_text_info_to_image(image: np.ndarray, text: str):
+    h, w, c = image.shape
+    height = 30
+    canvas = np.zeros((height, w, c), dtype=np.uint8)
+
+    org = (5, height - 5)
+    fontFace = cv2.FONT_HERSHEY_SIMPLEX
+    fontScale = 0.5
+    color = (255, 255, 255)
+    thickness = 1
+    lineType = cv2.LINE_AA
+
+    cv2.putText(canvas, text, org, fontFace, fontScale, color, thickness, lineType)
+    image = np.vstack([canvas, image])
+    return image
+
+
+def post_process_render_image(
+    image: np.ndarray,
+    action_num: int,
+    q_values: torch.Tensor | None = None,
+    v_value: torch.Tensor | None = None,
+):
+    assert q_values.ndim == 2 and len(q_values) == 1
+    assert v_value.ndim == 2 and len(q_values) == 1
+
+    q_values = q_values[0]
+    assert len(q_values) == action_num
+    v_value = v_value
+
+    if v_value is not None:
+        v_value = v_value.item()
+        image = append_text_info_to_image(image, f"v: {v_value:.4f}")
+    else:
+        image = append_text_info_to_image(image, "")
+
+    if q_values is not None:
+        for i, q_value in enumerate(q_values):
+            q_value = q_value.item()
+            image = append_text_info_to_image(image, f"q{i}: {q_value:.4f}")
+    else:
+        for _ in range(action_num):
+            image = append_text_info_to_image(image, "")
+
+    return image
 
 
 class FC(nn.Module):
@@ -461,8 +509,6 @@ class DuelingDQNTrainer:
             record_states = [] if self.record_condition(eval_count) else None
 
             while not done:
-                if record_states is not None:
-                    record_states.append(env.render())
                 value, advantage, shifted_advantage, q_value = (
                     self.policy.calculate_q_value(
                         network=self.value_network, state=state
@@ -471,6 +517,15 @@ class DuelingDQNTrainer:
                 action, _ = self.policy.get_action_by_target_policy(
                     action_values=q_value
                 )
+                if record_states is not None:
+                    image = env.render()
+                    image = post_process_render_image(
+                        image=image,
+                        action_num=int(env.action_space.n),
+                        q_values=q_value,
+                        v_value=value,
+                    )
+                    record_states.append(image)
 
                 next_state, reward, terminated, truncated, _ = env.step(action=action)
 
@@ -481,7 +536,22 @@ class DuelingDQNTrainer:
                 num_time_steps += 1
 
             if record_states is not None:
-                record_states.append(env.render())
+                value, advantage, shifted_advantage, q_value = (
+                    self.policy.calculate_q_value(
+                        network=self.value_network, state=state
+                    )
+                )
+                action, _ = self.policy.get_action_by_target_policy(
+                    action_values=q_value
+                )
+                image = env.render()
+                image = post_process_render_image(
+                    image=image,
+                    action_num=int(env.action_space.n),
+                    q_values=q_value,
+                    v_value=value,
+                )
+                record_states.append(image)
 
             self.log_dict.add(
                 items={
