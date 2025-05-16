@@ -242,13 +242,6 @@ def make_single_atari_env(config: Config):
     return env
 
 
-def reset_with_fire_action(env: gym.Env, seed=None):
-    _, _ = env.reset(seed=seed)
-    obs, _, terminated, truncated, info = env.step(1)
-    assert not (terminated or truncated)
-    return obs, info
-
-
 class FC(nn.Module):
     def __init__(self, input_dim, output_dim):
         super().__init__()
@@ -458,8 +451,8 @@ class DuelingDQNTrainer:
         config = self.config
         env = self.eval_env
         for eval_episode_count in range(config.num_eval_episodes):
-            obs, _ = reset_with_fire_action(
-                env=env, seed=config.eval_env_seed if eval_episode_count == 0 else None
+            obs, _ = env.reset(
+                seed=config.eval_env_seed if eval_episode_count == 0 else None
             )
             state = np_state_to_torch_state(obs, device=config.device)
             done = False
@@ -475,7 +468,9 @@ class DuelingDQNTrainer:
                         network=self.value_network, state=state
                     )
                 )
-                action, _ = self.policy.get_action_by_target_policy(action_value=q_value)
+                action, _ = self.policy.get_action_by_target_policy(
+                    action_values=q_value
+                )
 
                 next_state, reward, terminated, truncated, _ = env.step(action=action)
 
@@ -568,7 +563,7 @@ class DuelingDQNTrainer:
         time_step = 0
         eval_count = 0
         pbar = tqdm(total=config.total_timesteps)
-        obs, _ = reset_with_fire_action(env=env, seed=config.train_env_seed)
+        obs, _ = env.reset(seed=config.train_env_seed)
         while time_step < config.total_timesteps:
             training_start = self.rb.cur_size >= config.update_start_buffer_size
 
@@ -626,7 +621,7 @@ class DuelingDQNTrainer:
             )
 
             if terminated or truncated:
-                next_obs, info = reset_with_fire_action(env=env)
+                next_obs, info = env.reset()
             obs = next_obs
         pbar.close()
 
