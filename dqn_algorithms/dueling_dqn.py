@@ -53,7 +53,7 @@ class Config:
     train_env_seed: int = 1
     eval_env_seed: int = 2
 
-    total_timesteps: int = 2500000
+    total_timesteps: int = 10000000
     learning_rate: float = 3e-4
     buffer_size: int = 100000
     batch_size: int = 256
@@ -64,15 +64,15 @@ class Config:
     end_epsilon: float = 0.1
     target_epsilon: float = 0.05
     epsilon_decay_timestep: int = 1000000
-    target_network_update_frequency: int = 500
+    target_network_update_frequency: int = 10000
     shift_method: str = "mean"
 
     track: bool = True
     capture_video: bool = True
     # model_save_frequency: int = 50000  # env step
-    loss_logging_frequency: int = 5000  # env step
-    eval_frequency: int = 25000  # env step
-    record_every_n_eval_steps: int = 1  # env step
+    loss_logging_frequency: int = 10000  # env step
+    eval_frequency: int = 50000  # env step
+    record_every_n_eval_steps: int = 2  # env step
     num_eval_episodes: int = 10
 
 
