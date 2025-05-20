@@ -31,15 +31,8 @@ run_id = make_id()
 env_name = "ALE/Breakout-v5"
 wandb_project: str = f"{env_name}/0".replace("/", "_")
 wandb_name: str = f"Dueling_DQN_{run_id}"
-wandb_notes: str | None = (
-    "Make target policy epsilon greedy with 0.05, behavior policy end_epsilon 0.1 & Remove sticky action"
-)
-wandb_tags: list[str] = [
-    "Duelling DQN",
-    "Target policy epsilon greedy",
-    "Modify behavior policy",
-    "Remove sticky action",
-]
+wandb_notes: str | None = None
+wandb_tags: list[str] = ["Duelling DQN"]
 
 
 @dataclass
@@ -67,8 +60,8 @@ class Config:
     target_network_update_frequency: int = 10000
     shift_method: str = "mean"
 
-    track: bool = True
-    capture_video: bool = True
+    track: bool = False
+    capture_video: bool = False
     # model_save_frequency: int = 50000  # env step
     loss_logging_frequency: int = 10000  # env step
     eval_frequency: int = 50000  # env step
